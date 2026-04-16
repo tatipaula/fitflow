@@ -175,7 +175,22 @@ export default function WorkoutPage() {
         <div className="text-center">
           <p className="text-4xl mb-4">✓</p>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Treino concluído!</h2>
-          <p className="text-sm text-gray-500">Ótimo trabalho, {athlete?.name}.</p>
+          <p className="text-sm text-gray-500 mb-6">Ótimo trabalho, {athlete?.name}.</p>
+          <button
+            onClick={async () => {
+              if (athlete) {
+                const s = await getAthleteSessions(athlete.id)
+                setSessions(s)
+              }
+              setCompleted(false)
+              setStarted(false)
+              setSessionId(null)
+              setTab('historico')
+            }}
+            className="px-6 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Ver meu histórico
+          </button>
         </div>
       </div>
     )
