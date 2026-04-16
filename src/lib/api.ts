@@ -10,6 +10,7 @@ import type {
   Exercise,
   LogSetInput,
   Session,
+  SessionWithLogs,
   SetLog,
   Trainer,
   Workout,
@@ -17,11 +18,12 @@ import type {
 import { parseWorkoutFromTranscript } from './claude'
 import { supabase } from './supabase'
 import { transcribeAudio } from './whisper'
+import { searchExerciseVideo } from './youtube'
 
 // ─── Trainers ─────────────────────────────────────────────────────────────────
 
 export async function getTrainer(id: string): Promise<Trainer | null> {
-  const { data, error } = await supabase.from('trainers').select('*').eq('id', id).single()
+  const { data, error } = await supabase.from('trainers').select('*').eq('id', id).maybeSingle()
   if (error) return null
   return data as Trainer
 }
@@ -51,7 +53,7 @@ export async function createAthlete(name: string, email: string): Promise<Athlet
 }
 
 export async function getAthleteById(id: string): Promise<Athlete | null> {
-  const { data, error } = await supabase.from('athletes').select('*').eq('id', id).single()
+  const { data, error } = await supabase.from('athletes').select('*').eq('id', id).maybeSingle()
   if (error) return null
   return data as Athlete
 }
@@ -61,7 +63,7 @@ export async function getAthleteByAuthId(authUserId: string): Promise<Athlete | 
     .from('athletes')
     .select('*')
     .eq('auth_user_id', authUserId)
-    .single()
+    .maybeSingle()
   if (error) return null
   return data as Athlete
 }
@@ -87,7 +89,7 @@ export async function getAthleteByInviteToken(token: string): Promise<Athlete | 
     .from('athletes')
     .select('*')
     .eq('invite_token', token)
-    .single()
+    .maybeSingle()
   if (error) return null
   return data as Athlete
 }
@@ -146,11 +148,20 @@ export async function processWorkoutAudio(
     return null
   }
 
-  // 3. Salvar exercícios e marcar como pronto
+  // 3. Buscar vídeos do YouTube para cada exercício (best-effort — não bloqueia o fluxo)
+  const videoIds = await Promise.all(
+    parseResult.exercises.map(async (ex) => {
+      const videos = await searchExerciseVideo(ex.name)
+      return videos[0]?.id ?? null
+    })
+  )
+
+  // 4. Salvar exercícios e marcar como pronto
   const exercises = parseResult.exercises.map((ex, i) => ({
     ...ex,
     workout_id: workoutId,
     order_index: i,
+    youtube_video_id: videoIds[i] ?? null,
   }))
 
   const { error: insertError } = await supabase.from('exercises').insert(exercises)
@@ -164,7 +175,7 @@ export async function processWorkoutAudio(
     .update({ status: 'ready', raw_json: parseResult.exercises })
     .eq('id', workoutId)
 
-  return parseResult.exercises as unknown as Exercise[]
+  return exercises as unknown as Exercise[]
 }
 
 // ─── Exercises ────────────────────────────────────────────────────────────────
@@ -189,6 +200,17 @@ export async function startSession(workoutId: string, athleteId: string): Promis
     .single()
   if (error) return null
   return data as Session
+}
+
+export async function getAthleteSessions(athleteId: string): Promise<SessionWithLogs[]> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('*, set_logs(*, exercises(name))')
+    .eq('athlete_id', athleteId)
+    .not('completed_at', 'is', null)
+    .order('started_at', { ascending: false })
+  if (error) return []
+  return data as unknown as SessionWithLogs[]
 }
 
 export async function completeSession(sessionId: string): Promise<boolean> {

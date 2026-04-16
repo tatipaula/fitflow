@@ -1,6 +1,7 @@
 # FitFlow — Status do Projeto
 
-**Última atualização:** 12/04/2026 (sessão 4)
+**Última atualização:** 13/04/2026 (sessão 6)
+**Produção:** https://fitflow-bay-nine.vercel.app
 
 ---
 
@@ -30,18 +31,19 @@
 - [x] RLS de `workouts`, `exercises`, `sessions`, `set_logs` corrigido: políticas de atleta agora resolvem `athletes.id` via join em vez de comparar diretamente com `auth.uid()`
 
 ### Edge Functions (Supabase)
-- [x] `transcribe-audio` — recebe `audio_url`, busca áudio do Storage, chama Whisper API, retorna `transcript`
-- [x] `parse-workout` — recebe `transcript`, chama Claude (claude-haiku-4-5-20251001), retorna array de exercícios em JSON
+- [x] `transcribe-audio` — deployada via `npx supabase functions deploy`
+- [x] `parse-workout` — deployada via `npx supabase functions deploy`
 - [x] Secrets configurados: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
-- [x] Bucket `audio` criado no Supabase Storage (public)
-- [⚠️] Processamento de áudio falha em produção — causa ainda não identificada (ver seção Bugs)
+- [x] Bucket `audio` criado no Supabase Storage (public) — política RLS de upload corrigida (migration `20260412000003`)
+- [x] Edge Functions redeployadas com `--no-verify-jwt` (resolveu erro 401)
+- [x] `parse-workout` funcionando — créditos Anthropic confirmados (problema era propagação do pagamento)
 
 ### Integrações externas (`src/lib/`)
 - [x] `supabase.ts` — cliente Supabase
 - [x] `whisper.ts` — upload para Storage + invoke Edge Function
 - [x] `claude.ts` — invoke Edge Function `parse-workout`
 - [x] `youtube.ts` — busca de vídeos via YouTube Data API v3
-- [x] `api.ts` — camada central com todas as operações CRUD + `createAthlete`, `getAthleteByAuthId`, `linkAthleteAccount`
+- [x] `api.ts` — camada central com todas as operações CRUD + `createAthlete`, `getAthleteByAuthId`, `linkAthleteAccount`, `getAthleteWorkouts`
 
 ### Estado global (`src/stores/authStore.ts`)
 - [x] Zustand store com `role`, `trainer`, `athlete`, `loading`
@@ -71,6 +73,21 @@
 - [x] Login para atletas que já têm conta
 - [x] Vinculação automática de `auth_user_id` após autenticação
 
+### Tela do Atleta (`/athlete`) — `WorkoutPage.tsx`
+- [x] Exibir treino mais recente com status `ready`
+- [x] Iniciar sessão (`startSession`)
+- [x] Check-in por série: reps feitas + peso opcional
+- [x] Registro de `set_logs` por série concluída
+- [x] Séries concluídas marcadas em verde
+- [x] Concluir sessão quando todas as séries forem feitas
+- [x] Timer de descanso entre séries — banner fixo no rodapé com countdown MM:SS, barra de progresso e botão "Pular" ⚠️ aguarda teste
+- [x] Embed de vídeo YouTube por exercício — iframe 16:9, só aparece se `youtube_video_id` preenchido ⚠️ aguarda teste
+- [x] Aba Histórico — lista sessões concluídas, expansível por sessão com séries registradas ⚠️ aguarda teste
+- [x] Gráficos de evolução (Recharts) — peso máximo e média de reps por exercício ao longo das sessões ⚠️ aguarda teste
+
+### Tipos TypeScript
+- [x] `Athlete` atualizado com campo `auth_user_id: string | null`
+
 ### Componentes
 - [x] `LoadingSpinner.tsx`
 
@@ -78,32 +95,29 @@
 
 ## Bugs conhecidos
 
-- [ ] **Processamento de áudio falha** — `transcribe-audio` Edge Function retorna erro mesmo com secrets configurados. Investigar: (1) políticas do bucket `audio` no Storage, (2) logs em Supabase Dashboard → Edge Functions → Logs, (3) confirmar deploy das funções com `npx supabase functions deploy`
+- [x] ~~Créditos Anthropic insuficientes~~ — resolvido (propagação do pagamento)
+- [x] ~~Erro 406 no endpoint do trainer~~ — corrigido: `.single()` → `.maybeSingle()` em todas as queries SELECT (`getTrainer`, `getAthleteByAuthId`, `getAthleteById`, `getAthleteByInviteToken`) ⚠️ aguarda teste em produção
 
 ---
 
 ## Pendente
 
 ### Deploy
-- [ ] Criar repositório git e push para GitHub
-- [ ] Deploy no Vercel (vercel.json já criado, variáveis VITE_ a configurar no painel)
+- [x] Repositório GitHub: https://github.com/tatipaula/fitflow
+- [x] Deploy no Vercel: https://fitflow-bay-nine.vercel.app
 
-### Tela do Atleta (`/athlete`) — `WorkoutPage.tsx`
-- [x] Exibir treino mais recente atribuído ao atleta
-- [x] Iniciar sessão de treino
-- [x] Log de séries (reps feitas + peso)
-- [x] Concluir sessão
-- [ ] Timer de descanso entre séries
-- [ ] Embed de vídeo do YouTube por exercício
 
 ### Relatórios e evolução
-- [ ] Gráficos de evolução por exercício com Recharts
-- [ ] Histórico de sessões do atleta
+- [x] Histórico de sessões do atleta ⚠️ aguarda teste
+- [x] Gráficos de evolução por exercício com Recharts ⚠️ aguarda teste
 
 ### Pagamentos
 - [ ] Integração Stripe para plano `pro` do trainer
 
 ---
+
+## Integrações externas
+- [x] YouTube Data API v3 — chave `VITE_YOUTUBE_API_KEY` configurada no `.env`; busca automática de vídeo após parsing; `videoEmbeddable=true` para evitar vídeos não incorporáveis ⚠️ aguarda teste com novo treino
 
 ## Arquitetura — decisões registradas
 - Áudio nunca processado no frontend — sempre via Edge Function (chave OpenAI fica server-side)

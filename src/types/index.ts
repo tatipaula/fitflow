@@ -71,6 +71,16 @@ export interface SetLog {
   deleted: boolean
 }
 
+// ─── Histórico ────────────────────────────────────────────────────────────────
+
+export interface SetLogWithExercise extends SetLog {
+  exercises: Pick<Exercise, 'name'>
+}
+
+export interface SessionWithLogs extends Session {
+  set_logs: SetLogWithExercise[]
+}
+
 // ─── API / request shapes ─────────────────────────────────────────────────────
 
 export interface CreateWorkoutInput {

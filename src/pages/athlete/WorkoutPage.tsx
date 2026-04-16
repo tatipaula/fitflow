@@ -1,15 +1,22 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet } from '@/lib/api'
-import type { Workout, Exercise } from '@/types'
+import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions } from '@/lib/api'
+import { getYouTubeEmbedUrl } from '@/lib/youtube'
+import type { Workout, Exercise, SessionWithLogs } from '@/types'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 type SetState = {
   reps: string
   weight: string
   done: boolean
   saving: boolean
+}
+
+type RestTimer = {
+  remaining: number
+  total: number
 }
 
 export default function WorkoutPage() {
@@ -24,6 +31,11 @@ export default function WorkoutPage() {
   const [completing, setCompleting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [sets, setSets] = useState<Record<string, SetState>>({})
+  const [restTimer, setRestTimer] = useState<RestTimer | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [tab, setTab] = useState<'treino' | 'historico'>('treino')
+  const [sessions, setSessions] = useState<SessionWithLogs[]>([])
+  const [expandedSession, setExpandedSession] = useState<string | null>(null)
 
   useEffect(() => {
     if (!athlete) { setLoading(false); return }
@@ -42,10 +54,23 @@ export default function WorkoutPage() {
         })
         setSets(initial)
       }
+      const s = await getAthleteSessions(athlete!.id)
+      setSessions(s)
       setLoading(false)
     }
     load()
   }, [athlete])
+
+  useEffect(() => {
+    if (!restTimer || restTimer.remaining <= 0) {
+      if (restTimer?.remaining === 0) setRestTimer(null)
+      return
+    }
+    timerRef.current = setTimeout(() => {
+      setRestTimer((t) => t ? { ...t, remaining: t.remaining - 1 } : null)
+    }, 1000)
+    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+  }, [restTimer])
 
   async function handleStart() {
     if (!workout || !athlete) return
@@ -82,6 +107,13 @@ export default function WorkoutPage() {
       ...prev,
       [key]: { ...prev[key], done: !!result, saving: false },
     }))
+
+    if (result) {
+      const exercise = exercises.find((e) => e.id === exerciseId)
+      if (exercise && exercise.rest_seconds > 0) {
+        setRestTimer({ remaining: exercise.rest_seconds, total: exercise.rest_seconds })
+      }
+    }
   }
 
   async function handleComplete() {
@@ -123,6 +155,31 @@ export default function WorkoutPage() {
     )
   }
 
+  // Agrupa set_logs por nome de exercício para os gráficos de evolução
+  const evolutionByExercise = useMemo(() => {
+    const map: Record<string, { date: string; maxWeight: number | null; avgReps: number }[]> = {}
+    ;[...sessions].reverse().forEach((s) => {
+      const date = new Date(s.started_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+      const byExercise: Record<string, { reps: number[]; weights: (number | null)[] }> = {}
+      s.set_logs.filter((l) => !l.deleted).forEach((log) => {
+        const name = log.exercises.name
+        if (!byExercise[name]) byExercise[name] = { reps: [], weights: [] }
+        byExercise[name].reps.push(log.reps_done)
+        byExercise[name].weights.push(log.weight_kg)
+      })
+      Object.entries(byExercise).forEach(([name, { reps, weights }]) => {
+        if (!map[name]) map[name] = []
+        const validWeights = weights.filter((w): w is number => w !== null)
+        map[name].push({
+          date,
+          maxWeight: validWeights.length > 0 ? Math.max(...validWeights) : null,
+          avgReps: Math.round(reps.reduce((a, b) => a + b, 0) / reps.length),
+        })
+      })
+    })
+    return map
+  }, [sessions])
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
@@ -138,8 +195,114 @@ export default function WorkoutPage() {
         </button>
       </header>
 
+      <div className="border-b border-gray-200 bg-white">
+        <div className="max-w-lg mx-auto px-6 flex gap-6">
+          {(['treino', 'historico'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`py-3 text-sm font-medium border-b-2 transition-colors capitalize ${
+                tab === t
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              {t === 'treino' ? 'Treino' : 'Histórico'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <main className="max-w-lg mx-auto px-6 py-8">
-        {!workout ? (
+        {tab === 'historico' ? (
+          sessions.length === 0 ? (
+            <div className="text-center py-16">
+              <p className="text-gray-500 font-medium">Nenhuma sessão concluída ainda.</p>
+              <p className="text-sm text-gray-400 mt-1">Complete seu primeiro treino para ver o histórico.</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                {sessions.map((s) => {
+                  const isExpanded = expandedSession === s.id
+                  const activeLogs = s.set_logs.filter((l) => !l.deleted)
+                  return (
+                    <div key={s.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                      <button
+                        onClick={() => setExpandedSession(isExpanded ? null : s.id)}
+                        className="w-full px-4 py-3 flex items-center justify-between text-left"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {new Date(s.started_at).toLocaleDateString('pt-BR', {
+                              day: '2-digit',
+                              month: 'long',
+                              year: 'numeric',
+                            })}
+                          </p>
+                          <p className="text-sm text-gray-500">{activeLogs.length} série{activeLogs.length !== 1 ? 's' : ''} registrada{activeLogs.length !== 1 ? 's' : ''}</p>
+                        </div>
+                        <span className="text-gray-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
+                      </button>
+
+                      {isExpanded && activeLogs.length > 0 && (
+                        <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-1">
+                          {activeLogs.map((log) => (
+                            <div key={log.id} className="flex items-center justify-between text-sm py-1">
+                              <span className="text-gray-700">
+                                {log.exercises.name} — Série {log.set_number}
+                              </span>
+                              <span className="text-gray-500 font-medium">
+                                {log.reps_done} reps{log.weight_kg ? ` · ${log.weight_kg} kg` : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {Object.keys(evolutionByExercise).length > 0 && (
+                <div className="mt-8 space-y-6">
+                  <h2 className="text-base font-semibold text-gray-900">Evolução por exercício</h2>
+                  {Object.entries(evolutionByExercise).map(([name, data]) => (
+                    <div key={name} className="bg-white rounded-2xl border border-gray-200 p-4">
+                      <p className="text-sm font-medium text-gray-700 mb-3">{name}</p>
+                      {data.some((d) => d.maxWeight !== null) && (
+                        <div className="mb-4">
+                          <p className="text-xs text-gray-400 mb-1">Peso máximo (kg)</p>
+                          <ResponsiveContainer width="100%" height={120}>
+                            <LineChart data={data}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                              <YAxis tick={{ fontSize: 11 }} width={30} />
+                              <Tooltip />
+                              <Line type="monotone" dataKey="maxWeight" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} name="kg" />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-xs text-gray-400 mb-1">Média de reps</p>
+                        <ResponsiveContainer width="100%" height={120}>
+                          <LineChart data={data}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} width={30} />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="avgReps" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} name="reps" />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )
+        ) : !workout ? (
           <div className="text-center py-16">
             <p className="text-gray-500 font-medium">Nenhum treino disponível.</p>
             <p className="text-sm text-gray-400 mt-1">
@@ -183,6 +346,17 @@ export default function WorkoutPage() {
                   </p>
                   {ex.notes && (
                     <p className="text-xs text-gray-400 mt-0.5">{ex.notes}</p>
+                  )}
+                  {ex.youtube_video_id && (
+                    <div className="mt-3 rounded-xl overflow-hidden aspect-video">
+                      <iframe
+                        src={getYouTubeEmbedUrl(ex.youtube_video_id)}
+                        title={ex.name}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full"
+                      />
+                    </div>
                   )}
                 </div>
 
@@ -269,6 +443,32 @@ export default function WorkoutPage() {
           </div>
         )}
       </main>
+
+      {restTimer && (
+        <div className="fixed bottom-0 inset-x-0 bg-gray-900 text-white px-6 py-4 flex items-center justify-between shadow-2xl">
+          <div>
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Descanso</p>
+            <p className="text-3xl font-bold tabular-nums">
+              {String(Math.floor(restTimer.remaining / 60)).padStart(2, '0')}:
+              {String(restTimer.remaining % 60).padStart(2, '0')}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-32 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-1000"
+                style={{ width: `${(restTimer.remaining / restTimer.total) * 100}%` }}
+              />
+            </div>
+            <button
+              onClick={() => setRestTimer(null)}
+              className="text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              Pular
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

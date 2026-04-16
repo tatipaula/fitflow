@@ -25,7 +25,7 @@ export async function searchExerciseVideo(exerciseName: string): Promise<YouTube
 
   try {
     const query = encodeURIComponent(`${exerciseName} exercício como fazer`)
-    const url = `${BASE_URL}/search?part=snippet&q=${query}&type=video&maxResults=3&key=${API_KEY}`
+    const url = `${BASE_URL}/search?part=snippet&q=${query}&type=video&videoEmbeddable=true&maxResults=3&key=${API_KEY}`
 
     const response = await fetch(url)
     if (!response.ok) throw new Error(`YouTube API error: ${response.status}`)

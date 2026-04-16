@@ -57,7 +57,8 @@ Deno.serve(async (req) => {
 
     if (!claudeRes.ok) {
       const err = await claudeRes.text()
-      throw new Error(`Claude API: ${err}`)
+      console.error('[parse-workout] Claude API status:', claudeRes.status, 'body:', err)
+      throw new Error(`Claude API ${claudeRes.status}: ${err}`)
     }
 
     const claudeData = await claudeRes.json()
