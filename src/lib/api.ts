@@ -121,6 +121,50 @@ export async function createWorkout(input: CreateWorkoutInput): Promise<Workout 
 }
 
 /**
+ * Fluxo de texto: texto livre → parsing Claude → salva exercícios.
+ * Alternativa ao áudio — o trainer digita ou cola a descrição do treino.
+ */
+export async function processWorkoutText(
+  workoutId: string,
+  text: string,
+): Promise<Exercise[] | null> {
+  await supabase.from('workouts').update({ status: 'parsing', transcript: text }).eq('id', workoutId)
+
+  const parseResult = await parseWorkoutFromTranscript(text, workoutId)
+  if (!parseResult) {
+    await supabase.from('workouts').update({ status: 'error' }).eq('id', workoutId)
+    return null
+  }
+
+  const videoIds = await Promise.all(
+    parseResult.exercises.map(async (ex) => {
+      const videos = await searchExerciseVideo(ex.name)
+      return videos[0]?.id ?? null
+    })
+  )
+
+  const exercises = parseResult.exercises.map((ex, i) => ({
+    ...ex,
+    workout_id: workoutId,
+    order_index: i,
+    youtube_video_id: videoIds[i] ?? null,
+  }))
+
+  const { error: insertError } = await supabase.from('exercises').insert(exercises)
+  if (insertError) {
+    await supabase.from('workouts').update({ status: 'error' }).eq('id', workoutId)
+    return null
+  }
+
+  await supabase
+    .from('workouts')
+    .update({ status: 'ready', raw_json: parseResult.exercises })
+    .eq('id', workoutId)
+
+  return exercises as unknown as Exercise[]
+}
+
+/**
  * Fluxo completo: áudio → transcrição → parsing Claude → salva exercícios.
  * Retorna os exercícios ou null se qualquer etapa falhar.
  */

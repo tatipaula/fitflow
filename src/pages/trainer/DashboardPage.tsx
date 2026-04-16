@@ -8,6 +8,7 @@ import {
   createAthlete,
   createWorkout,
   processWorkoutAudio,
+  processWorkoutText,
   getExercises,
 } from '@/lib/api'
 import type { Athlete, Workout, Exercise } from '@/types'
@@ -44,7 +45,9 @@ export default function DashboardPage() {
   // Workouts
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [selectedAthleteId, setSelectedAthleteId] = useState('')
+  const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio')
   const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [workoutText, setWorkoutText] = useState('')
   const [isRecording, setIsRecording] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [processingStatus, setProcessingStatus] = useState('')
@@ -118,7 +121,9 @@ export default function DashboardPage() {
 
   async function handleProcessWorkout(e: React.FormEvent) {
     e.preventDefault()
-    if (!audioFile || !selectedAthleteId) return
+    if (!selectedAthleteId) return
+    if (inputMode === 'audio' && !audioFile) return
+    if (inputMode === 'text' && !workoutText.trim()) return
     setProcessing(true)
     setProcessingError(null)
     setProcessingStatus('Criando treino...')
@@ -133,12 +138,20 @@ export default function DashboardPage() {
     setWorkouts((prev) => [workout, ...prev])
     setProcessingStatus('Transcrevendo áudio (pode levar alguns segundos)...')
 
-    const result = await processWorkoutAudio(workout.id, audioFile)
+    let result: Awaited<ReturnType<typeof processWorkoutAudio>>
+    if (inputMode === 'text') {
+      setProcessingStatus('Analisando treino com IA...')
+      result = await processWorkoutText(workout.id, workoutText)
+    } else {
+      setProcessingStatus('Transcrevendo áudio (pode levar alguns segundos)...')
+      result = await processWorkoutAudio(workout.id, audioFile!)
+    }
 
     if (!result) {
-      setProcessingError('Falha ao processar o áudio. Verifique as chaves de API e tente novamente.')
+      setProcessingError('Falha ao processar o treino. Verifique as chaves de API e tente novamente.')
     } else {
       setAudioFile(null)
+      setWorkoutText('')
       setSelectedAthleteId('')
       if (trainer) {
         const updated = await getWorkouts(trainer.id)
@@ -242,40 +255,68 @@ export default function DashboardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Áudio do treino</label>
-                    <div className="flex flex-wrap gap-2 items-center">
-                      {!isRecording ? (
-                        <button
-                          type="button"
-                          onClick={handleStartRecording}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-                          Gravar
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleStopRecording}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 text-sm text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
-                          Parar gravação
-                        </button>
-                      )}
-                      <span className="text-gray-400 text-sm">ou</span>
-                      <label className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
-                        Enviar arquivo
-                        <input
-                          type="file"
-                          accept="audio/*"
-                          className="hidden"
-                          onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
-                        />
-                      </label>
+                    <div className="flex gap-1 mb-3 bg-gray-100 rounded-lg p-1 w-fit">
+                      <button
+                        type="button"
+                        onClick={() => setInputMode('audio')}
+                        className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${inputMode === 'audio' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+                      >
+                        Áudio
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInputMode('text')}
+                        className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${inputMode === 'text' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+                      >
+                        Texto
+                      </button>
                     </div>
-                    {audioFile && (
-                      <p className="mt-2 text-sm text-green-600">✓ {audioFile.name}</p>
+
+                    {inputMode === 'audio' ? (
+                      <>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {!isRecording ? (
+                            <button
+                              type="button"
+                              onClick={handleStartRecording}
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                              Gravar
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleStopRecording}
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 text-sm text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
+                              Parar gravação
+                            </button>
+                          )}
+                          <span className="text-gray-400 text-sm">ou</span>
+                          <label className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
+                            Enviar arquivo
+                            <input
+                              type="file"
+                              accept="audio/*"
+                              className="hidden"
+                              onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                        </div>
+                        {audioFile && (
+                          <p className="mt-2 text-sm text-green-600">✓ {audioFile.name}</p>
+                        )}
+                      </>
+                    ) : (
+                      <textarea
+                        value={workoutText}
+                        onChange={(e) => setWorkoutText(e.target.value)}
+                        placeholder="Descreva o treino... Ex: Agachamento 4x12 descanso 60s, Supino 3x10 descanso 90s..."
+                        rows={5}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                      />
                     )}
                   </div>
 
@@ -289,7 +330,12 @@ export default function DashboardPage() {
 
                   <button
                     type="submit"
-                    disabled={!audioFile || !selectedAthleteId || processing || isRecording}
+                    disabled={
+                      !selectedAthleteId ||
+                      processing ||
+                      isRecording ||
+                      (inputMode === 'audio' ? !audioFile : !workoutText.trim())
+                    }
                     className="w-full py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
                     {processing ? 'Processando...' : 'Processar treino'}
