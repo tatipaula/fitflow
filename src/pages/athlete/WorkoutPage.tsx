@@ -135,27 +135,8 @@ export default function WorkoutPage() {
       Array.from({ length: e.sets }, (_, i) => i + 1).every((s) => sets[`${e.id}-${s}`]?.done)
     )
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <LoadingSpinner size="lg" message="Carregando..." />
-      </div>
-    )
-  }
-
-  if (completed) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-4xl mb-4">✓</p>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Treino concluído!</h2>
-          <p className="text-sm text-gray-500">Ótimo trabalho, {athlete?.name}.</p>
-        </div>
-      </div>
-    )
-  }
-
   // Agrupa set_logs por nome de exercício para os gráficos de evolução
+  // DEVE ficar antes de qualquer early return para não violar Rules of Hooks
   const evolutionByExercise = useMemo(() => {
     const map: Record<string, { date: string; maxWeight: number | null; avgReps: number }[]> = {}
     ;[...sessions].reverse().forEach((s) => {
@@ -179,6 +160,26 @@ export default function WorkoutPage() {
     })
     return map
   }, [sessions])
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <LoadingSpinner size="lg" message="Carregando..." />
+      </div>
+    )
+  }
+
+  if (completed) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <p className="text-4xl mb-4">✓</p>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Treino concluído!</h2>
+          <p className="text-sm text-gray-500">Ótimo trabalho, {athlete?.name}.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
