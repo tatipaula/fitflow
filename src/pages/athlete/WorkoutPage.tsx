@@ -279,20 +279,32 @@ export default function WorkoutPage() {
                         <span className="text-gray-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
                       </button>
 
-                      {isExpanded && activeLogs.length > 0 && (
-                        <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-1">
-                          {activeLogs.map((log) => (
-                            <div key={log.id} className="flex items-center justify-between text-sm py-1">
-                              <span className="text-gray-700">
-                                {log.exercises.name} — Série {log.set_number}
-                              </span>
-                              <span className="text-gray-500 font-medium">
-                                {log.reps_done} reps{log.weight_kg ? ` · ${log.weight_kg} kg` : ''}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {isExpanded && activeLogs.length > 0 && (() => {
+                        const byExercise: Record<string, { sets: number; maxWeight: number | null }> = {}
+                        activeLogs.forEach((log) => {
+                          const name = log.exercises.name
+                          if (!byExercise[name]) byExercise[name] = { sets: 0, maxWeight: null }
+                          byExercise[name].sets += 1
+                          if (log.weight_kg !== null) {
+                            byExercise[name].maxWeight = byExercise[name].maxWeight === null
+                              ? log.weight_kg
+                              : Math.max(byExercise[name].maxWeight, log.weight_kg)
+                          }
+                        })
+                        return (
+                          <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-2">
+                            {Object.entries(byExercise).map(([name, { sets, maxWeight }]) => (
+                              <div key={name} className="flex items-center justify-between text-sm">
+                                <span className="text-gray-700 font-medium">{name}</span>
+                                <span className="text-gray-500">
+                                  {sets} série{sets !== 1 ? 's' : ''}
+                                  {maxWeight !== null ? ` · máx ${maxWeight} kg` : ''}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })()}
                     </div>
                   )
                 })}
