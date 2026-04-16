@@ -49,7 +49,12 @@ export default function WorkoutPage() {
         const initial: Record<string, SetState> = {}
         ex.forEach((e) => {
           for (let s = 1; s <= e.sets; s++) {
-            initial[`${e.id}-${s}`] = { reps: String(e.reps), weight: '', done: false, saving: false }
+            initial[`${e.id}-${s}`] = {
+              reps: String(e.reps),
+              weight: e.weight_kg ? String(e.weight_kg) : '',
+              done: false,
+              saving: false,
+            }
           }
         })
         setSets(initial)
@@ -134,6 +139,19 @@ export default function WorkoutPage() {
     exercises.every((e) =>
       Array.from({ length: e.sets }, (_, i) => i + 1).every((s) => sets[`${e.id}-${s}`]?.done)
     )
+
+  // Último peso registrado por nome de exercício (para sugestão de peso)
+  const lastWeightByName = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const s of sessions) {
+      for (const log of s.set_logs) {
+        if (!log.deleted && log.weight_kg !== null && !(log.exercises.name in map)) {
+          map[log.exercises.name] = log.weight_kg
+        }
+      }
+    }
+    return map
+  }, [sessions])
 
   // Agrupa set_logs por nome de exercício para os gráficos de evolução
   // DEVE ficar antes de qualquer early return para não violar Rules of Hooks
@@ -429,7 +447,11 @@ export default function WorkoutPage() {
                                 }))
                               }
                               className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-sm text-center outline-none focus:border-blue-500"
-                              placeholder="kg"
+                              placeholder={
+                                lastWeightByName[ex.name]
+                                  ? String(lastWeightByName[ex.name])
+                                  : 'kg'
+                              }
                             />
                             <button
                               onClick={() => handleLogSet(ex.id, setNum)}

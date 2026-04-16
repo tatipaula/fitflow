@@ -15,6 +15,7 @@ Formato obrigatório:
       "name": "nome do exercício em português",
       "sets": <número inteiro de séries>,
       "reps": <número inteiro de repetições por série>,
+      "weight_kg": <peso em kg como número decimal, ou null se não mencionado>,
       "rest_seconds": <descanso em segundos, inteiro>,
       "notes": "<observações ou null>",
       "youtube_video_id": null
@@ -24,6 +25,7 @@ Formato obrigatório:
 
 Regras:
 - Se um valor não for mencionado, use defaults: sets=3, reps=10, rest_seconds=60
+- weight_kg deve ser null se o peso não for mencionado explicitamente
 - notes deve ser null se não houver observação
 - youtube_video_id sempre null (será preenchido depois)
 - Retorne APENAS o JSON, sem texto antes ou depois`
