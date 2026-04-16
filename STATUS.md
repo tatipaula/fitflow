@@ -1,6 +1,6 @@
 # FitFlow — Status do Projeto
 
-**Última atualização:** 13/04/2026 (sessão 6)
+**Última atualização:** 16/04/2026 (sessão 7)
 **Produção:** https://fitflow-bay-nine.vercel.app
 
 ---
@@ -63,7 +63,7 @@
 ### Painel do Personal (`/trainer`) — `DashboardPage.tsx`
 - [x] Header com nome do trainer e botão de logout
 - [x] Aba Atletas: listar atletas, adicionar atleta, copiar link de convite
-- [x] Aba Treinos: gravar áudio (MediaRecorder) ou upload de arquivo, selecionar atleta, processar treino
+- [x] Aba Treinos: gravar áudio (MediaRecorder), upload de arquivo de áudio ou **digitar/colar texto** (toggle Áudio/Texto)
 - [x] Status do treino em tempo real (pending → transcribing → parsing → ready | error)
 - [x] Expandir treino para ver exercícios extraídos
 
@@ -80,13 +80,16 @@
 - [x] Registro de `set_logs` por série concluída
 - [x] Séries concluídas marcadas em verde
 - [x] Concluir sessão quando todas as séries forem feitas
-- [x] Timer de descanso entre séries — banner fixo no rodapé com countdown MM:SS, barra de progresso e botão "Pular" ⚠️ aguarda teste
-- [x] Embed de vídeo YouTube por exercício — iframe 16:9, só aparece se `youtube_video_id` preenchido ⚠️ aguarda teste
-- [x] Aba Histórico — lista sessões concluídas, expansível por sessão com séries registradas ⚠️ aguarda teste
-- [x] Gráficos de evolução (Recharts) — peso máximo e média de reps por exercício ao longo das sessões ⚠️ aguarda teste
+- [x] Timer de descanso entre séries — banner fixo no rodapé com countdown MM:SS, barra de progresso e botão "Pular" ✅ testado
+- [x] Embed de vídeo YouTube por exercício — iframe 16:9, só aparece se `youtube_video_id` preenchido ✅ testado
+- [x] Aba Histórico — sessões expandíveis com resumo por exercício (séries + peso máximo) ✅ testado
+- [x] Gráficos de evolução (Recharts) — peso máximo e média de reps por exercício ao longo das sessões ✅ testado
+- [x] Botão "Ver meu histórico" na tela de treino concluído — recarrega sessões e abre aba Histórico
+- [x] Sugestão de peso no campo de série — peso prescrito como valor inicial; último peso do histórico como placeholder
 
 ### Tipos TypeScript
 - [x] `Athlete` atualizado com campo `auth_user_id: string | null`
+- [x] `Exercise` atualizado com campo `weight_kg: number | null`
 
 ### Componentes
 - [x] `LoadingSpinner.tsx`
@@ -96,7 +99,8 @@
 ## Bugs conhecidos
 
 - [x] ~~Créditos Anthropic insuficientes~~ — resolvido (propagação do pagamento)
-- [x] ~~Erro 406 no endpoint do trainer~~ — corrigido: `.single()` → `.maybeSingle()` em todas as queries SELECT (`getTrainer`, `getAthleteByAuthId`, `getAthleteById`, `getAthleteByInviteToken`) ⚠️ aguarda teste em produção
+- [x] ~~Erro 406 no endpoint do trainer~~ — corrigido: `.single()` → `.maybeSingle()` ✅ testado em produção
+- [x] ~~Tela do atleta em branco~~ — corrigido: `useMemo` estava após early returns (violação de Rules of Hooks)
 
 ---
 
@@ -108,8 +112,8 @@
 
 
 ### Relatórios e evolução
-- [x] Histórico de sessões do atleta ⚠️ aguarda teste
-- [x] Gráficos de evolução por exercício com Recharts ⚠️ aguarda teste
+- [x] Histórico de sessões do atleta ✅ testado
+- [x] Gráficos de evolução por exercício com Recharts ✅ testado
 
 ### Pagamentos
 - [ ] Integração Stripe para plano `pro` do trainer
@@ -117,7 +121,7 @@
 ---
 
 ## Integrações externas
-- [x] YouTube Data API v3 — chave `VITE_YOUTUBE_API_KEY` configurada no `.env`; busca automática de vídeo após parsing; `videoEmbeddable=true` para evitar vídeos não incorporáveis ⚠️ aguarda teste com novo treino
+- [x] YouTube Data API v3 — chave `VITE_YOUTUBE_API_KEY` configurada no `.env` e no Vercel; busca automática de vídeo após parsing ✅ testado em produção
 
 ## Arquitetura — decisões registradas
 - Áudio nunca processado no frontend — sempre via Edge Function (chave OpenAI fica server-side)
