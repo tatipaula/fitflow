@@ -1,6 +1,6 @@
 # FitFlow — Status do Projeto
 
-**Última atualização:** 19/04/2026 (sessão 9)
+**Última atualização:** 19/04/2026 (sessão 10)
 **Produção:** https://fitflow-bay-nine.vercel.app
 
 ---
@@ -75,6 +75,9 @@
 - [x] Campo de nome do treino (ex: "Pernas A", "Costas B") ao criar
 - [x] Status do treino em tempo real (pending → transcribing → parsing → ready | error)
 - [x] Expandir treino para ver exercícios; nome do treino exibido na lista
+- [x] **Renomear treino** — edição inline no card expandido (Enter salva, Esc cancela)
+- [x] **Excluir treino** — botão vermelho com confirmação antes de deletar
+- [x] **Notificação por email ao atleta** — Edge Function `notify-athlete` via Resend; disparada após processamento concluído; remetente provisório `onboarding@resend.dev` (trocar para domínio próprio futuramente)
 
 ### Página de Convite (`/invite/:token`) — `InvitePage.tsx`
 - [x] Busca atleta pelo invite token (política pública de RLS)
@@ -101,6 +104,11 @@
 
 ### Banco de dados — Migrations
 - [x] `20260419000001_add_workout_name.sql` — coluna `name text` na tabela `workouts` (suporte a múltiplas fichas por atleta)
+
+### Edge Functions
+- [x] `transcribe-audio` — transcrição via OpenAI Whisper
+- [x] `parse-workout` — estruturação via Claude Haiku
+- [x] `notify-athlete` — email ao atleta via Resend quando treino fica pronto
 
 ### Tipos TypeScript
 - [x] `Athlete` atualizado com campo `auth_user_id: string | null`

@@ -120,6 +120,16 @@ export async function createWorkout(input: CreateWorkoutInput): Promise<Workout 
   return data as Workout
 }
 
+export async function updateWorkoutName(id: string, name: string): Promise<boolean> {
+  const { error } = await supabase.from('workouts').update({ name }).eq('id', id)
+  return !error
+}
+
+export async function deleteWorkout(id: string): Promise<boolean> {
+  const { error } = await supabase.from('workouts').delete().eq('id', id)
+  return !error
+}
+
 /**
  * Fluxo de texto: texto livre → parsing Claude → salva exercícios.
  * Alternativa ao áudio — o trainer digita ou cola a descrição do treino.

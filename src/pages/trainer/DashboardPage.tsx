@@ -6,6 +6,7 @@ import { FFWordmark, FFMeter, FFAvatar, FFIcon } from '@/components/ui'
 import {
   getAthletes, getWorkouts, createAthlete, createWorkout,
   processWorkoutAudio, processWorkoutText, getExercises,
+  updateWorkoutName, deleteWorkout,
 } from '@/lib/api'
 import type { Athlete, Workout, Exercise } from '@/types'
 
@@ -80,6 +81,9 @@ export default function DashboardPage() {
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null)
   const [exercises, setExercises] = useState<Record<string, Exercise[]>>({})
   const [loadingExercises, setLoadingExercises] = useState(false)
+  const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const [deletingWorkoutId, setDeletingWorkoutId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!trainer) { setLoadingData(false); return }
@@ -141,6 +145,7 @@ export default function DashboardPage() {
     const result = inputMode === 'text' ? await processWorkoutText(workout.id, workoutText) : await processWorkoutAudio(workout.id, audioFile!)
     if (!result) { setProcessingError('Falha ao processar. Verifique as chaves de API.'); setProcessing(false); return }
     if (trainer) { const updated = await getWorkouts(trainer.id); setWorkouts(updated); setDetectedExercises(await getExercises(workout.id)) }
+    supabase.functions.invoke('notify-athlete', { body: { workout_id: workout.id } })
     setAudioFile(null); setWorkoutText(''); setWorkoutName(''); setProcessing(false)
   }
 
@@ -153,6 +158,21 @@ export default function DashboardPage() {
       setExercises((p) => ({ ...p, [workout.id]: ex }))
       setLoadingExercises(false)
     }
+  }
+
+  async function handleSaveWorkoutName(id: string) {
+    const ok = await updateWorkoutName(id, editingName.trim())
+    if (ok) setWorkouts((p) => p.map((w) => w.id === id ? { ...w, name: editingName.trim() } : w))
+    setEditingWorkoutId(null)
+  }
+
+  async function handleDeleteWorkout(id: string) {
+    const ok = await deleteWorkout(id)
+    if (ok) {
+      setWorkouts((p) => p.filter((w) => w.id !== id))
+      if (expandedWorkoutId === id) setExpandedWorkoutId(null)
+    }
+    setDeletingWorkoutId(null)
   }
 
   function copyInviteLink(a: Athlete) { navigator.clipboard.writeText(`${window.location.origin}/invite/${a.invite_token}`) }
@@ -427,6 +447,16 @@ export default function DashboardPage() {
             const expanded = expandedWorkoutId === w.id
             return (
               <Card key={w.id} style={{ padding: 0, overflow: 'hidden' }}>
+                {/* Confirm delete overlay */}
+                {deletingWorkoutId === w.id && (
+                  <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'color-mix(in oklch, var(--danger), black 70%)' }}>
+                    <span style={{ fontSize: 13, color: 'var(--danger)' }}>Excluir este treino?</span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => handleDeleteWorkout(w.id)} style={{ height: 34, padding: '0 16px', borderRadius: 999, background: 'var(--danger)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Excluir</button>
+                      <button onClick={() => setDeletingWorkoutId(null)} style={{ height: 34, padding: '0 16px', borderRadius: 999, background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--ink-4)', fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
                 <button onClick={() => handleToggleWorkout(w)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'none', border: 'none', color: 'var(--fg-1)', cursor: 'pointer', textAlign: 'left' }}>
                   <FFAvatar name={athlete?.name ?? '?'} size={38}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -467,6 +497,30 @@ export default function DashboardPage() {
                     )}
                     {w.status === 'error' && <div style={{ fontSize: 12, color: 'var(--danger)' }}>Falha ao processar.</div>}
                     {['transcribing', 'parsing', 'pending'].includes(w.status) && <LoadingSpinner size="sm" message={statusLabel[w.status]}/>}
+
+                    {/* Edit name */}
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--ink-4)' }}>
+                      {editingWorkoutId === w.id ? (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveWorkoutName(w.id); if (e.key === 'Escape') setEditingWorkoutId(null) }}
+                            style={{ flex: 1, height: 36, padding: '0 12px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--fg-1)', outline: 'none' }}/>
+                          <button onClick={() => handleSaveWorkoutName(w.id)} style={{ height: 36, padding: '0 14px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
+                          <button onClick={() => setEditingWorkoutId(null)} style={{ height: 36, padding: '0 12px', borderRadius: 999, background: 'transparent', color: 'var(--fg-3)', border: '1px solid var(--ink-4)', fontSize: 12, cursor: 'pointer' }}>✕</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => { setEditingWorkoutId(w.id); setEditingName(w.name ?? '') }}
+                            style={{ height: 32, padding: '0 14px', borderRadius: 999, background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--ink-4)', fontSize: 12, cursor: 'pointer' }}>
+                            Renomear
+                          </button>
+                          <button onClick={() => setDeletingWorkoutId(w.id)}
+                            style={{ height: 32, padding: '0 14px', borderRadius: 999, background: 'transparent', color: 'var(--danger)', border: '1px solid color-mix(in oklch, var(--danger), black 40%)', fontSize: 12, cursor: 'pointer' }}>
+                            Excluir
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </Card>
