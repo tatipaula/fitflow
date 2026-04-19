@@ -2,26 +2,19 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { FFLogo, FFButton, FFTag, FFAvatar, FFIcon } from '@/components/ui'
 import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
 import type { Workout, Exercise, SessionWithLogs } from '@/types'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
-type SetState = {
-  reps: string
-  weight: string
-  done: boolean
-  saving: boolean
-}
-
-type RestTimer = {
-  remaining: number
-  total: number
-}
+type AthleteTab = 'treinos' | 'evolucao'
+type RestTimer = { remaining: number; total: number }
 
 export default function WorkoutPage() {
   const { athlete, clearAuth } = useAuthStore()
   const [loading, setLoading] = useState(true)
+  const [availableWorkouts, setAvailableWorkouts] = useState<Workout[]>([])
   const [workout, setWorkout] = useState<Workout | null>(null)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -30,35 +23,27 @@ export default function WorkoutPage() {
   const [completed, setCompleted] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
-  const [sets, setSets] = useState<Record<string, SetState>>({})
+
+  const [expandedExId, setExpandedExId] = useState<string | null>(null)
+  const [currentSetByEx, setCurrentSetByEx] = useState<Record<string, number>>({})
+  const [repsByEx, setRepsByEx] = useState<Record<string, string>>({})
+  const [weightByEx, setWeightByEx] = useState<Record<string, string>>({})
+  const [setsDone, setSetsDone] = useState<Set<string>>(new Set())
+  const [savingSet, setSavingSet] = useState(false)
+
   const [restTimer, setRestTimer] = useState<RestTimer | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [tab, setTab] = useState<'treino' | 'historico'>('treino')
+
+  const [tab, setTab] = useState<AthleteTab>('treinos')
   const [sessions, setSessions] = useState<SessionWithLogs[]>([])
-  const [expandedSession, setExpandedSession] = useState<string | null>(null)
 
   useEffect(() => {
     if (!athlete) { setLoading(false); return }
     async function load() {
-      const workouts = await getAthleteWorkouts(athlete!.id)
-      const latest = workouts.find((w) => w.status === 'ready') ?? null
-      setWorkout(latest)
-      if (latest) {
-        const ex = await getExercises(latest.id)
-        setExercises(ex)
-        const initial: Record<string, SetState> = {}
-        ex.forEach((e) => {
-          for (let s = 1; s <= e.sets; s++) {
-            initial[`${e.id}-${s}`] = {
-              reps: String(e.reps),
-              weight: e.weight_kg ? String(e.weight_kg) : '',
-              done: false,
-              saving: false,
-            }
-          }
-        })
-        setSets(initial)
-      }
+      const allWorkouts = await getAthleteWorkouts(athlete!.id)
+      const ready = allWorkouts.filter((w) => w.status === 'ready')
+      setAvailableWorkouts(ready)
+      if (ready.length === 1) await selectWorkout(ready[0])
       const s = await getAthleteSessions(athlete!.id)
       setSessions(s)
       setLoading(false)
@@ -77,70 +62,92 @@ export default function WorkoutPage() {
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [restTimer])
 
-  async function handleStart() {
-    if (!workout || !athlete) return
-    setStarting(true)
-    setStartError(null)
-    const session = await startSession(workout.id, athlete.id)
-    if (!session) {
-      setStartError('Não foi possível iniciar o treino. Tente novamente.')
-      setStarting(false)
-      return
-    }
-    setSessionId(session.id)
-    setStarted(true)
-    setStarting(false)
+  async function selectWorkout(w: Workout) {
+    setWorkout(w)
+    const ex = await getExercises(w.id)
+    setExercises(ex)
+    const initSets: Record<string, number> = {}
+    const initReps: Record<string, string> = {}
+    const initWeights: Record<string, string> = {}
+    ex.forEach((e) => {
+      initSets[e.id] = 1
+      initReps[e.id] = String(e.reps)
+      initWeights[e.id] = e.weight_kg ? String(e.weight_kg) : ''
+    })
+    setCurrentSetByEx(initSets)
+    setRepsByEx(initReps)
+    setWeightByEx(initWeights)
   }
 
-  async function handleLogSet(exerciseId: string, setNumber: number) {
-    if (!sessionId) return
-    const key = `${exerciseId}-${setNumber}`
-    const s = sets[key]
-    if (!s || s.done || s.saving) return
+  function resetWorkout() {
+    setWorkout(null)
+    setExercises([])
+    setStarted(false)
+    setSessionId(null)
+    setSetsDone(new Set())
+    setExpandedExId(null)
+    setRestTimer(null)
+  }
 
-    setSets((prev) => ({ ...prev, [key]: { ...prev[key], saving: true } }))
+  async function handleStart() {
+    if (!workout || !athlete) return
+    setStarting(true); setStartError(null)
+    const session = await startSession(workout.id, athlete.id)
+    if (!session) { setStartError('Não foi possível iniciar. Tente novamente.'); setStarting(false); return }
+    setSessionId(session.id)
+    setStarted(true); setStarting(false)
+    if (exercises.length > 0) setExpandedExId(exercises[0].id)
+  }
+
+  async function handleLogSet(ex: Exercise) {
+    if (!sessionId || savingSet) return
+    setSavingSet(true)
+    const setNum = currentSetByEx[ex.id] ?? 1
 
     const result = await logSet({
       session_id: sessionId,
-      exercise_id: exerciseId,
-      set_number: setNumber,
-      reps_done: parseInt(s.reps) || 0,
-      weight_kg: s.weight ? parseFloat(s.weight) : undefined,
+      exercise_id: ex.id,
+      set_number: setNum,
+      reps_done: parseInt(repsByEx[ex.id] ?? '0') || 0,
+      weight_kg: weightByEx[ex.id] ? parseFloat(weightByEx[ex.id]) : undefined,
     })
 
-    setSets((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], done: !!result, saving: false },
-    }))
-
     if (result) {
-      const exercise = exercises.find((e) => e.id === exerciseId)
-      if (exercise && exercise.rest_seconds > 0) {
-        setRestTimer({ remaining: exercise.rest_seconds, total: exercise.rest_seconds })
+      const key = `${ex.id}-${setNum}`
+      setSetsDone((prev) => new Set([...prev, key]))
+      const isLastSet = setNum >= ex.sets
+
+      if (ex.rest_seconds > 0) {
+        setRestTimer({ remaining: ex.rest_seconds, total: ex.rest_seconds })
+      }
+
+      if (!isLastSet) {
+        setCurrentSetByEx((prev) => ({ ...prev, [ex.id]: setNum + 1 }))
+        setRepsByEx((prev) => ({ ...prev, [ex.id]: String(ex.reps) }))
+        setWeightByEx((prev) => ({ ...prev, [ex.id]: ex.weight_kg ? String(ex.weight_kg) : '' }))
+      } else {
+        const currIdx = exercises.findIndex((e) => e.id === ex.id)
+        const nextEx = exercises[currIdx + 1]
+        setExpandedExId(nextEx ? nextEx.id : null)
       }
     }
+    setSavingSet(false)
   }
 
   async function handleComplete() {
     if (!sessionId) return
     setCompleting(true)
     await completeSession(sessionId)
-    setCompleted(true)
-    setCompleting(false)
+    setCompleted(true); setCompleting(false)
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    clearAuth()
-  }
+  const allExsDone = useMemo(
+    () => exercises.length > 0 && exercises.every((ex) =>
+      Array.from({ length: ex.sets }, (_, s) => s + 1).every((s) => setsDone.has(`${ex.id}-${s}`))
+    ),
+    [exercises, setsDone]
+  )
 
-  const allSetsDone =
-    exercises.length > 0 &&
-    exercises.every((e) =>
-      Array.from({ length: e.sets }, (_, i) => i + 1).every((s) => sets[`${e.id}-${s}`]?.done)
-    )
-
-  // Último peso registrado por nome de exercício (para sugestão de peso)
   const lastWeightByName = useMemo(() => {
     const map: Record<string, number> = {}
     for (const s of sessions) {
@@ -153,372 +160,415 @@ export default function WorkoutPage() {
     return map
   }, [sessions])
 
-  // Agrupa set_logs por nome de exercício para os gráficos de evolução
-  // DEVE ficar antes de qualquer early return para não violar Rules of Hooks
-  const evolutionByExercise = useMemo(() => {
-    const map: Record<string, { date: string; maxWeight: number | null; avgReps: number }[]> = {}
-    ;[...sessions].reverse().forEach((s) => {
-      const date = new Date(s.started_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-      const byExercise: Record<string, { reps: number[]; weights: (number | null)[] }> = {}
-      s.set_logs.filter((l) => !l.deleted).forEach((log) => {
-        const name = log.exercises.name
-        if (!byExercise[name]) byExercise[name] = { reps: [], weights: [] }
-        byExercise[name].reps.push(log.reps_done)
-        byExercise[name].weights.push(log.weight_kg)
-      })
-      Object.entries(byExercise).forEach(([name, { reps, weights }]) => {
-        if (!map[name]) map[name] = []
-        const validWeights = weights.filter((w): w is number => w !== null)
-        map[name].push({
-          date,
-          maxWeight: validWeights.length > 0 ? Math.max(...validWeights) : null,
-          avgReps: Math.round(reps.reduce((a, b) => a + b, 0) / reps.length),
-        })
-      })
+  const volumeData = useMemo(() =>
+    [...sessions].reverse().slice(-8).map((s) => {
+      const vol = s.set_logs.filter((l) => !l.deleted).reduce((sum, l) => sum + l.reps_done * (l.weight_kg ?? 1), 0)
+      return { date: new Date(s.started_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), volume: Math.round(vol) }
+    }), [sessions])
+
+  const weeklyData = useMemo(() => {
+    const byWeek: Record<string, number> = {}
+    sessions.forEach((s) => {
+      const d = new Date(s.started_at)
+      const week = `S${Math.ceil(d.getDate() / 7)}`
+      byWeek[week] = (byWeek[week] ?? 0) + 1
     })
-    return map
+    return Object.entries(byWeek).slice(-6).map(([week, count]) => ({ week, count }))
   }, [sessions])
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <LoadingSpinner size="lg" message="Carregando..." />
-      </div>
-    )
-  }
+  const exerciseLoadData = useMemo(() => {
+    const map: Record<string, { best: number; last: number }> = {}
+    sessions.forEach((s) => {
+      s.set_logs.filter((l) => !l.deleted && l.weight_kg !== null).forEach((l) => {
+        const name = l.exercises.name
+        if (!map[name]) map[name] = { best: 0, last: 0 }
+        map[name].last = l.weight_kg!
+        map[name].best = Math.max(map[name].best, l.weight_kg!)
+      })
+    })
+    return Object.entries(map).map(([name, { best, last }]) => ({ name, best, last }))
+  }, [sessions])
 
-  if (completed) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-4xl mb-4">✓</p>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Treino concluído!</h2>
-          <p className="text-sm text-gray-500 mb-6">Ótimo trabalho, {athlete?.name}.</p>
-          <button
+  // ── Loading ───────────────────────────────────────────────────────────────
+  if (loading) return (
+    <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <LoadingSpinner size="lg" message="Carregando..."/>
+    </div>
+  )
+
+  // ── Completed ─────────────────────────────────────────────────────────────
+  if (completed) return (
+    <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
+      <div style={{ textAlign: 'center', maxWidth: 320 }}>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+          {FFIcon.check(28, 'var(--accent)')}
+        </div>
+        <div className="display" style={{ fontSize: 36, marginBottom: 8 }}>Treino concluído!</div>
+        <p style={{ fontSize: 14, color: 'var(--fg-2)', marginBottom: 28, lineHeight: 1.6 }}>
+          Ótimo trabalho, {athlete?.name?.split(' ')[0] ?? ''}!
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <FFButton variant="primary" size="lg" style={{ width: '100%', justifyContent: 'center' }}
             onClick={async () => {
-              if (athlete) {
-                const s = await getAthleteSessions(athlete.id)
-                setSessions(s)
-              }
-              setCompleted(false)
-              setStarted(false)
-              setSessionId(null)
-              setTab('historico')
-            }}
-            className="px-6 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
-          >
-            Ver meu histórico
+              if (athlete) { const s = await getAthleteSessions(athlete.id); setSessions(s) }
+              setCompleted(false); resetWorkout()
+            }}>
+            {availableWorkouts.length > 1 ? 'Escolher próximo treino' : 'Voltar'}
+          </FFButton>
+          <FFButton variant="ghost" size="md" style={{ width: '100%', justifyContent: 'center' }}
+            onClick={async () => {
+              if (athlete) { const s = await getAthleteSessions(athlete.id); setSessions(s) }
+              setCompleted(false); resetWorkout(); setTab('evolucao')
+            }}>
+            Ver minha evolução
+          </FFButton>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ── Bottom nav ────────────────────────────────────────────────────────────
+  const navItems: { key: AthleteTab; label: string; icon: (size: number, color: string) => React.ReactNode }[] = [
+    { key: 'treinos', label: 'Treinos', icon: FFIcon.dumbbell },
+    { key: 'evolucao', label: 'Evolução', icon: FFIcon.flame },
+  ]
+
+  const bottomNav = (
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40 }}>
+      {restTimer && (
+        <div style={{ padding: '10px 20px', background: 'var(--ink-3)', borderTop: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {FFIcon.clock(15, 'var(--accent)')}
+            <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>Descansando</span>
+          </div>
+          <div className="num" style={{ fontSize: 22, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
+            {String(Math.floor(restTimer.remaining / 60)).padStart(1, '0')}:{String(restTimer.remaining % 60).padStart(2, '0')}
+          </div>
+          <button onClick={() => setRestTimer(null)} style={{ fontSize: 11, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}>
+            Pular
           </button>
         </div>
+      )}
+      <div style={{ display: 'flex', background: 'rgba(14,13,11,0.94)', backdropFilter: 'blur(16px)', borderTop: '1px solid var(--ink-4)', paddingBottom: 'env(safe-area-inset-bottom, 0)' }}>
+        {navItems.map(({ key, label, icon }) => (
+          <button key={key} onClick={() => setTab(key)}
+            style={{ flex: 1, padding: '12px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: tab === key ? 'var(--accent)' : 'var(--fg-3)' }}>
+            {icon(20, tab === key ? 'var(--accent)' : 'var(--fg-4)')}
+            <span style={{ fontSize: 10, letterSpacing: '0.06em', fontFamily: "'JetBrains Mono', monospace" }}>{label}</span>
+          </button>
+        ))}
       </div>
-    )
+    </div>
+  )
+
+  // ── Header ────────────────────────────────────────────────────────────────
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    clearAuth()
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">FitFlow</h1>
-          <p className="text-sm text-gray-500">{athlete?.name}</p>
-        </div>
-        <button
-          onClick={handleSignOut}
-          className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
-        >
+  const pageHeader = (label: string) => (
+    <div style={{ padding: '54px 20px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <FFLogo size={22}/>
+        <div className="eyebrow">{label}</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={handleSignOut} style={{ fontSize: 11, color: 'var(--fg-1)', background: 'none', border: '1px solid var(--fg-2)', borderRadius: 999, padding: '4px 12px', cursor: 'pointer', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.06em' }}>
           Sair
         </button>
-      </header>
-
-      <div className="border-b border-gray-200 bg-white">
-        <div className="max-w-lg mx-auto px-6 flex gap-6">
-          {(['treino', 'historico'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`py-3 text-sm font-medium border-b-2 transition-colors capitalize ${
-                tab === t
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-900'
-              }`}
-            >
-              {t === 'treino' ? 'Treino' : 'Histórico'}
-            </button>
-          ))}
-        </div>
+        <FFAvatar name={athlete?.name ?? 'A'} size={32} tone="warm"/>
       </div>
+    </div>
+  )
 
-      <main className="max-w-lg mx-auto px-6 py-8">
-        {tab === 'historico' ? (
-          sessions.length === 0 ? (
-            <div className="text-center py-16">
-              <p className="text-gray-500 font-medium">Nenhuma sessão concluída ainda.</p>
-              <p className="text-sm text-gray-400 mt-1">Complete seu primeiro treino para ver o histórico.</p>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-3">
-                {sessions.map((s) => {
-                  const isExpanded = expandedSession === s.id
-                  const activeLogs = s.set_logs.filter((l) => !l.deleted)
-                  return (
-                    <div key={s.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                      <button
-                        onClick={() => setExpandedSession(isExpanded ? null : s.id)}
-                        className="w-full px-4 py-3 flex items-center justify-between text-left"
-                      >
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {new Date(s.started_at).toLocaleDateString('pt-BR', {
-                              day: '2-digit',
-                              month: 'long',
-                              year: 'numeric',
-                            })}
-                          </p>
-                          <p className="text-sm text-gray-500">{activeLogs.length} série{activeLogs.length !== 1 ? 's' : ''} registrada{activeLogs.length !== 1 ? 's' : ''}</p>
-                        </div>
-                        <span className="text-gray-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
-                      </button>
+  // ── EVOLUTION TAB ─────────────────────────────────────────────────────────
+  if (tab === 'evolucao') {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', paddingBottom: 90 }}>
+        {pageHeader('Evolução')}
 
-                      {isExpanded && activeLogs.length > 0 && (() => {
-                        const byExercise: Record<string, { sets: number; maxWeight: number | null }> = {}
-                        activeLogs.forEach((log) => {
-                          const name = log.exercises.name
-                          if (!byExercise[name]) byExercise[name] = { sets: 0, maxWeight: null }
-                          byExercise[name].sets += 1
-                          if (log.weight_kg !== null) {
-                            byExercise[name].maxWeight = byExercise[name].maxWeight === null
-                              ? log.weight_kg
-                              : Math.max(byExercise[name].maxWeight, log.weight_kg)
-                          }
-                        })
-                        return (
-                          <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-2">
-                            {Object.entries(byExercise).map(([name, { sets, maxWeight }]) => (
-                              <div key={name} className="flex items-center justify-between text-sm">
-                                <span className="text-gray-700 font-medium">{name}</span>
-                                <span className="text-gray-500">
-                                  {sets} série{sets !== 1 ? 's' : ''}
-                                  {maxWeight !== null ? ` · máx ${maxWeight} kg` : ''}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      })()}
-                    </div>
-                  )
-                })}
-              </div>
-
-              {Object.keys(evolutionByExercise).length > 0 && (
-                <div className="mt-8 space-y-6">
-                  <h2 className="text-base font-semibold text-gray-900">Evolução por exercício</h2>
-                  {Object.entries(evolutionByExercise).map(([name, data]) => (
-                    <div key={name} className="bg-white rounded-2xl border border-gray-200 p-4">
-                      <p className="text-sm font-medium text-gray-700 mb-3">{name}</p>
-                      {data.some((d) => d.maxWeight !== null) && (
-                        <div className="mb-4">
-                          <p className="text-xs text-gray-400 mb-1">Peso máximo (kg)</p>
-                          <ResponsiveContainer width="100%" height={120}>
-                            <LineChart data={data}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                              <YAxis tick={{ fontSize: 11 }} width={30} />
-                              <Tooltip />
-                              <Line type="monotone" dataKey="maxWeight" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} name="kg" />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-xs text-gray-400 mb-1">Média de reps</p>
-                        <ResponsiveContainer width="100%" height={120}>
-                          <LineChart data={data}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                            <YAxis tick={{ fontSize: 11 }} width={30} />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="avgReps" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} name="reps" />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )
-        ) : !workout ? (
-          <div className="text-center py-16">
-            <p className="text-gray-500 font-medium">Nenhum treino disponível.</p>
-            <p className="text-sm text-gray-400 mt-1">
-              Aguarde seu personal trainer criar um treino para você.
-            </p>
-          </div>
-        ) : !started ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center">
-            <p className="text-sm text-gray-400 mb-1">
-              {new Date(workout.created_at).toLocaleDateString('pt-BR', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric',
-              })}
-            </p>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Seu treino está pronto</h2>
-            <p className="text-sm text-gray-500 mb-6">
-              {exercises.length} exercício{exercises.length !== 1 ? 's' : ''}
-            </p>
-            {startError && (
-              <p className="mb-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{startError}</p>
-            )}
-            <button
-              onClick={handleStart}
-              disabled={starting}
-              className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              {starting ? 'Iniciando...' : 'Iniciar treino'}
-            </button>
+        {sessions.length === 0 ? (
+          <div style={{ padding: '80px 24px', textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
+            Complete treinos para ver sua evolução.
           </div>
         ) : (
-          <div className="space-y-4">
-            {exercises.map((ex, exIdx) => (
-              <div key={ex.id} className="bg-white rounded-2xl border border-gray-200 p-4">
-                <div className="mb-3">
-                  <h3 className="font-semibold text-gray-900">
-                    {exIdx + 1}. {ex.name}
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    {ex.sets} séries × {ex.reps} reps — {ex.rest_seconds}s descanso
-                  </p>
-                  {ex.notes && (
-                    <p className="text-xs text-gray-400 mt-0.5">{ex.notes}</p>
-                  )}
-                  {ex.youtube_video_id && (
-                    <div className="mt-3 rounded-xl overflow-hidden aspect-video">
-                      <iframe
-                        src={getYouTubeEmbedUrl(ex.youtube_video_id)}
-                        title={ex.name}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-full"
-                      />
-                    </div>
-                  )}
+          <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
+
+            {volumeData.length > 1 && (
+              <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: 18 }}>
+                <div className="eyebrow" style={{ marginBottom: 2 }}>Volume total</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 14 }}>Carga × reps por sessão</div>
+                <div style={{ overflow: 'hidden' }}>
+                <ResponsiveContainer width="99%" height={120}>
+                  <LineChart data={volumeData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--ink-4)" vertical={false}/>
+                    <XAxis dataKey="date" tick={{ fill: 'var(--fg-4)', fontSize: 9, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{ fill: 'var(--fg-4)', fontSize: 9, fontFamily: 'JetBrains Mono' }} width={32} axisLine={false} tickLine={false}/>
+                    <Tooltip contentStyle={{ background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 8, fontSize: 11 }} labelStyle={{ color: 'var(--fg-2)' }} itemStyle={{ color: 'var(--accent)' }}/>
+                    <Line type="monotone" dataKey="volume" stroke="var(--accent)" strokeWidth={2} dot={false} name="vol"/>
+                  </LineChart>
+                </ResponsiveContainer>
                 </div>
+              </div>
+            )}
 
-                <div className="space-y-2">
-                  {Array.from({ length: ex.sets }, (_, i) => i + 1).map((setNum) => {
-                    const key = `${ex.id}-${setNum}`
-                    const s = sets[key]
-                    if (!s) return null
+            {weeklyData.length > 0 && (
+              <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: 18 }}>
+                <div className="eyebrow" style={{ marginBottom: 2 }}>Frequência semanal</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 14 }}>Treinos por semana</div>
+                <div style={{ overflow: 'hidden' }}>
+                <ResponsiveContainer width="99%" height={100}>
+                  <BarChart data={weeklyData} barSize={18}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--ink-4)" vertical={false}/>
+                    <XAxis dataKey="week" tick={{ fill: 'var(--fg-4)', fontSize: 9, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{ fill: 'var(--fg-4)', fontSize: 9, fontFamily: 'JetBrains Mono' }} width={20} axisLine={false} tickLine={false}/>
+                    <Tooltip contentStyle={{ background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 8, fontSize: 11 }} labelStyle={{ color: 'var(--fg-2)' }} itemStyle={{ color: 'var(--fg-2)' }}/>
+                    <Bar dataKey="count" fill="var(--fg-4)" radius={[3, 3, 0, 0]} name="treinos"/>
+                  </BarChart>
+                </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {exerciseLoadData.length > 0 && (
+              <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: 18, marginBottom: 8 }}>
+                <div className="eyebrow" style={{ marginBottom: 16 }}>Evolução de carga</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {exerciseLoadData.map(({ name, best, last }) => {
+                    const pct = best > 0 ? Math.round((last / best) * 100) : 100
                     return (
-                      <div
-                        key={setNum}
-                        className={`flex items-center gap-2 rounded-xl px-3 py-2 border transition-colors ${
-                          s.done
-                            ? 'border-green-200 bg-green-50'
-                            : 'border-gray-200 bg-gray-50'
-                        }`}
-                      >
-                        <span
-                          className={`text-sm font-medium w-14 shrink-0 ${
-                            s.done ? 'text-green-600' : 'text-gray-500'
-                          }`}
-                        >
-                          Série {setNum}
-                        </span>
-
-                        {s.done ? (
-                          <span className="flex-1 text-sm text-green-600 font-medium">
-                            {s.reps} reps{s.weight ? ` · ${s.weight} kg` : ''}
-                          </span>
-                        ) : (
-                          <>
-                            <input
-                              type="number"
-                              min="0"
-                              value={s.reps}
-                              onChange={(e) =>
-                                setSets((prev) => ({
-                                  ...prev,
-                                  [key]: { ...prev[key], reps: e.target.value },
-                                }))
-                              }
-                              className="w-16 rounded-lg border border-gray-300 px-2 py-1 text-sm text-center outline-none focus:border-blue-500"
-                              placeholder="Reps"
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.5"
-                              value={s.weight}
-                              onChange={(e) =>
-                                setSets((prev) => ({
-                                  ...prev,
-                                  [key]: { ...prev[key], weight: e.target.value },
-                                }))
-                              }
-                              className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-sm text-center outline-none focus:border-blue-500"
-                              placeholder={
-                                lastWeightByName[ex.name]
-                                  ? String(lastWeightByName[ex.name])
-                                  : 'kg'
-                              }
-                            />
-                            <button
-                              onClick={() => handleLogSet(ex.id, setNum)}
-                              disabled={s.saving || !s.reps}
-                              className="ml-auto px-3 py-1 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                            >
-                              {s.saving ? '...' : 'Feito'}
-                            </button>
-                          </>
-                        )}
+                      <div key={name}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <span style={{ fontSize: 13, color: 'var(--fg-1)' }}>{name}</span>
+                          <span className="num" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{last} kg</span>
+                        </div>
+                        <div style={{ height: 4, background: 'var(--ink-4)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 2, transition: 'width 0.5s ease' }}/>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                          <span style={{ fontSize: 9, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace" }}>0 kg</span>
+                          <span style={{ fontSize: 9, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace" }}>máx {best} kg</span>
+                        </div>
                       </div>
                     )
                   })}
                 </div>
               </div>
-            ))}
-
-            {allSetsDone && (
-              <button
-                onClick={handleComplete}
-                disabled={completing}
-                className="w-full py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                {completing ? 'Salvando...' : 'Concluir treino'}
-              </button>
             )}
           </div>
         )}
-      </main>
+        {bottomNav}
+      </div>
+    )
+  }
 
-      {restTimer && (
-        <div className="fixed bottom-0 inset-x-0 bg-gray-900 text-white px-6 py-4 flex items-center justify-between shadow-2xl">
-          <div>
-            <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Descanso</p>
-            <p className="text-3xl font-bold tabular-nums">
-              {String(Math.floor(restTimer.remaining / 60)).padStart(2, '0')}:
-              {String(restTimer.remaining % 60).padStart(2, '0')}
-            </p>
+  // ── TREINOS TAB ───────────────────────────────────────────────────────────
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--ink-0)', paddingBottom: 90 }}>
+      {pageHeader('Treinos')}
+
+      {!workout ? (
+        availableWorkouts.length === 0 ? (
+          <div style={{ padding: '80px 24px', textAlign: 'center' }}>
+            <div className="display" style={{ fontSize: 28, marginBottom: 12 }}>Nenhum treino disponível.</div>
+            <p style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.6 }}>Aguarde seu personal trainer criar um treino para você.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-32 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500 rounded-full transition-all duration-1000"
-                style={{ width: `${(restTimer.remaining / restTimer.total) * 100}%` }}
-              />
+        ) : (
+          <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ marginBottom: 8 }}>
+              <div className="display" style={{ fontSize: 28, lineHeight: 1 }}>
+                Escolha seu <span style={{ fontStyle: 'italic' }}>treino</span>
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 8 }}>
+                {availableWorkouts.length} ficha{availableWorkouts.length !== 1 ? 's' : ''} disponível{availableWorkouts.length !== 1 ? 'is' : ''}
+              </div>
             </div>
-            <button
-              onClick={() => setRestTimer(null)}
-              className="text-sm text-gray-400 hover:text-white transition-colors"
-            >
-              Pular
-            </button>
+            {availableWorkouts.map((w) => (
+              <button key={w.id} onClick={() => selectWorkout(w)}
+                style={{ width: '100%', textAlign: 'left', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: '18px 20px', cursor: 'pointer', color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
+                <div style={{ width: 44, height: 44, borderRadius: 'var(--r-md)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {FFIcon.dumbbell(20, 'var(--accent)')}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {w.name ?? 'Treino sem nome'}
+                  </div>
+                  <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+                    {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
+                  </div>
+                </div>
+                {FFIcon.chevR(14, 'var(--fg-4)')}
+              </button>
+            ))}
+          </div>
+        )
+      ) : (
+        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
+
+          {/* Workout header card */}
+          <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', overflow: 'hidden', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: 0, left: 20, right: 20, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.6 }}/>
+            <div style={{ padding: '20px 20px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <FFTag tone="accent">TREINO DE HOJE</FFTag>
+                {availableWorkouts.length > 1 && !started && (
+                  <button onClick={resetWorkout}
+                    style={{ fontSize: 11, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'JetBrains Mono', monospace" }}>
+                    {FFIcon.chevL(10, 'var(--fg-3)')} Trocar ficha
+                  </button>
+                )}
+              </div>
+              <div className="display" style={{ fontSize: 26, marginTop: 0, lineHeight: 1 }}>
+                {workout.name ?? 'Ficha do Dia'}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--fg-3)' }}>
+                {new Date(workout.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
+              </div>
+              <div style={{ display: 'flex', gap: 24, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--ink-4)' }}>
+                {[
+                  { k: 'Exercícios', v: String(exercises.length) },
+                  { k: 'Séries', v: String(exercises.reduce((s, e) => s + e.sets, 0)) },
+                  { k: 'Total reps', v: String(exercises.reduce((s, e) => s + e.sets * e.reps, 0)) },
+                ].map((m, i) => (
+                  <div key={i}>
+                    <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 22 }}>{m.v}</div>
+                    <div className="eyebrow" style={{ marginTop: 1 }}>{m.k}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {!started && (
+              <div style={{ padding: '14px 20px', background: 'var(--ink-3)', borderTop: '1px solid var(--ink-4)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
+                {startError && <span style={{ fontSize: 11, color: 'var(--danger)' }}>{startError}</span>}
+                <button onClick={handleStart} disabled={starting}
+                  style={{ height: 40, padding: '0 24px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: starting ? 'not-allowed' : 'pointer', opacity: starting ? 0.6 : 1 }}>
+                  {starting ? 'Iniciando...' : 'Iniciar treino'}
+                </button>
+              </div>
+            )}
+
+            {started && allExsDone && (
+              <div style={{ padding: '14px 20px', background: 'color-mix(in oklch, var(--accent), black 80%)', borderTop: '1px solid var(--accent)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, color: 'var(--accent)' }}>Todos os exercícios concluídos!</span>
+                <button onClick={handleComplete} disabled={completing}
+                  style={{ height: 40, padding: '0 24px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: completing ? 'not-allowed' : 'pointer', opacity: completing ? 0.6 : 1 }}>
+                  {completing ? 'Salvando...' : 'Concluir'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Exercise accordion */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {exercises.map((ex, i) => {
+              const exSetsDone = Array.from({ length: ex.sets }, (_, s) => s + 1).filter((s) => setsDone.has(`${ex.id}-${s}`))
+              const isAllDone = exSetsDone.length >= ex.sets
+              const isExpanded = expandedExId === ex.id && started && !isAllDone
+              const currentSet = currentSetByEx[ex.id] ?? 1
+
+              return (
+                <div key={ex.id} style={{
+                  background: 'var(--ink-2)',
+                  border: `1px solid ${isExpanded ? 'var(--fg-4)' : isAllDone ? 'color-mix(in oklch, var(--accent), black 60%)' : 'var(--ink-4)'}`,
+                  borderRadius: 'var(--r-lg)',
+                  overflow: 'hidden',
+                  opacity: isAllDone && !isExpanded ? 0.6 : 1,
+                  transition: 'opacity 0.2s, border-color 0.2s',
+                }}>
+                  {/* Header row */}
+                  <button
+                    onClick={() => started && !isAllDone ? setExpandedExId(isExpanded ? null : ex.id) : undefined}
+                    style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', color: 'var(--fg-1)', cursor: started && !isAllDone ? 'pointer' : 'default', textAlign: 'left' }}
+                  >
+                    <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${isAllDone ? 'var(--accent)' : 'var(--ink-4)'}`, background: isAllDone ? 'var(--accent-soft)' : 'transparent' }}>
+                      {isAllDone
+                        ? FFIcon.check(11, 'var(--accent)')
+                        : <span className="num" style={{ fontSize: 9, color: 'var(--fg-3)' }}>{String(i + 1).padStart(2, '0')}</span>
+                      }
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: isAllDone ? 'var(--fg-2)' : 'var(--fg-1)' }}>{ex.name}</div>
+                      <div className="num" style={{ marginTop: 2, fontSize: 10, color: 'var(--fg-3)', display: 'flex', gap: 6 }}>
+                        <span>{ex.sets}×{ex.reps}</span>
+                        {ex.weight_kg && <><span>·</span><span>{ex.weight_kg}kg</span></>}
+                        {ex.rest_seconds > 0 && <><span>·</span><span>{ex.rest_seconds}s desc</span></>}
+                      </div>
+                    </div>
+
+                    {started && (
+                      <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                        {Array.from({ length: ex.sets }, (_, s) => s + 1).map((s) => (
+                          <div key={s} style={{ width: 6, height: 6, borderRadius: '50%', background: setsDone.has(`${ex.id}-${s}`) ? 'var(--accent)' : 'var(--ink-4)', transition: 'background 0.2s' }}/>
+                        ))}
+                      </div>
+                    )}
+
+                    {started && !isAllDone && (
+                      <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}>
+                        {FFIcon.chevR(12, 'var(--fg-4)')}
+                      </div>
+                    )}
+                  </button>
+
+                  {/* Expanded: set logging */}
+                  {isExpanded && (
+                    <div style={{ borderTop: '1px solid var(--ink-4)', padding: '16px 16px 18px' }}>
+                      {ex.youtube_video_id && (
+                        <div style={{ marginBottom: 14, aspectRatio: '16/9', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+                          <iframe src={getYouTubeEmbedUrl(ex.youtube_video_id)} title={ex.name}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen style={{ width: '100%', height: '100%', border: 'none' }}/>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <div className="eyebrow">Série {currentSet} de {ex.sets}</div>
+                        {exSetsDone.length > 0 && (
+                          <span style={{ fontSize: 10, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace" }}>
+                            {exSetsDone.length}/{ex.sets} ✓
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 10, color: 'var(--fg-3)', marginBottom: 6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.1em', textTransform: 'uppercase' }}>Reps</div>
+                          <input type="number" min="0" value={repsByEx[ex.id] ?? ''}
+                            onChange={(e) => setRepsByEx((p) => ({ ...p, [ex.id]: e.target.value }))}
+                            style={{ width: '100%', height: 48, padding: '0 12px', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 18, color: 'var(--fg-1)', outline: 'none', textAlign: 'center', fontFamily: "'JetBrains Mono', monospace" }}/>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 10, color: 'var(--fg-3)', marginBottom: 6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.1em', textTransform: 'uppercase' }}>Kg</div>
+                          <input type="number" min="0" step="0.5" value={weightByEx[ex.id] ?? ''}
+                            onChange={(e) => setWeightByEx((p) => ({ ...p, [ex.id]: e.target.value }))}
+                            placeholder={lastWeightByName[ex.name] ? String(lastWeightByName[ex.name]) : '0'}
+                            style={{ width: '100%', height: 48, padding: '0 12px', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 18, color: 'var(--fg-1)', outline: 'none', textAlign: 'center', fontFamily: "'JetBrains Mono', monospace" }}/>
+                        </div>
+                      </div>
+
+                      <button onClick={() => handleLogSet(ex)} disabled={savingSet || !repsByEx[ex.id]}
+                        style={{ width: '100%', height: 50, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: savingSet || !repsByEx[ex.id] ? 'not-allowed' : 'pointer', opacity: savingSet || !repsByEx[ex.id] ? 0.5 : 1 }}>
+                        {FFIcon.check(16, 'var(--accent-ink)')}
+                        {savingSet ? 'Salvando...' : `Concluir série — ${repsByEx[ex.id] ?? ''} reps${weightByEx[ex.id] ? `, ${weightByEx[ex.id]} kg` : ''}`}
+                      </button>
+
+                      {ex.notes && (
+                        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--fg-3)', fontStyle: 'italic' }}>{ex.notes}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
+
+      {bottomNav}
     </div>
   )
 }

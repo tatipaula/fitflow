@@ -3,21 +3,23 @@ interface LoadingSpinnerProps {
   message?: string
 }
 
-const sizeClasses = {
-  sm: 'h-4 w-4',
-  md: 'h-8 w-8',
-  lg: 'h-12 w-12',
-}
-
 export default function LoadingSpinner({ size = 'md', message }: LoadingSpinnerProps) {
+  const px = size === 'sm' ? 16 : size === 'lg' ? 40 : 24
+  const r = px / 2 - 2
+  const circ = 2 * Math.PI * r
   return (
-    <div className="flex flex-col items-center justify-center gap-2">
-      <div
-        className={`${sizeClasses[size]} animate-spin rounded-full border-2 border-primary-200 border-t-primary-600`}
-        role="status"
-        aria-label="Carregando"
-      />
-      {message && <p className="text-sm text-gray-500">{message}</p>}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <svg width={px} height={px} viewBox={`0 0 ${px} ${px}`}
+        style={{ animation: 'ff-spin 0.8s linear infinite', flexShrink: 0 }}>
+        <circle cx={px/2} cy={px/2} r={r} fill="none" stroke="var(--ink-4)" strokeWidth="1.5"/>
+        <circle cx={px/2} cy={px/2} r={r} fill="none" stroke="var(--accent)" strokeWidth="1.5"
+          strokeDasharray={circ} strokeDashoffset={circ * 0.75}
+          strokeLinecap="round"
+          style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }}/>
+      </svg>
+      {message && (
+        <span className="eyebrow">{message}</span>
+      )}
     </div>
   )
 }

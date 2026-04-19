@@ -113,7 +113,7 @@ export async function createWorkout(input: CreateWorkoutInput): Promise<Workout 
 
   const { data, error } = await supabase
     .from('workouts')
-    .insert({ trainer_id: user.id, athlete_id: input.athlete_id, status: 'pending' })
+    .insert({ trainer_id: user.id, athlete_id: input.athlete_id, name: input.name ?? null, status: 'pending' })
     .select()
     .single()
   if (error) return null

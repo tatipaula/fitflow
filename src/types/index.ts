@@ -31,6 +31,7 @@ export interface Workout {
   id: string
   trainer_id: string
   athlete_id: string
+  name: string | null
   audio_url: string | null
   transcript: string | null
   raw_json: Exercise[] | null
@@ -86,6 +87,7 @@ export interface SessionWithLogs extends Session {
 
 export interface CreateWorkoutInput {
   athlete_id: string
+  name?: string
   audio_url?: string
 }
 

@@ -2,96 +2,114 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { FFWordmark, FFMeter, FFAvatar, FFIcon } from '@/components/ui'
 import {
-  getAthletes,
-  getWorkouts,
-  createAthlete,
-  createWorkout,
-  processWorkoutAudio,
-  processWorkoutText,
-  getExercises,
+  getAthletes, getWorkouts, createAthlete, createWorkout,
+  processWorkoutAudio, processWorkoutText, getExercises,
 } from '@/lib/api'
 import type { Athlete, Workout, Exercise } from '@/types'
 
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'Pendente',
-  transcribing: 'Transcrevendo...',
-  parsing: 'Analisando...',
-  ready: 'Pronto',
-  error: 'Erro',
+type TrainerView = 'home' | 'athletes' | 'workouts' | 'recording' | 'processing'
+
+const NAV_ITEMS: { key: TrainerView; label: string; icon: (c?: string) => JSX.Element }[] = [
+  { key: 'home',     label: 'Dashboard', icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
+  { key: 'athletes', label: 'Alunos',    icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2" strokeLinecap="round"/><path d="M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.87" strokeLinecap="round"/></svg> },
+  { key: 'workouts', label: 'Treinos',   icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round"><rect x="2" y="9" width="3" height="6" rx="0.5"/><rect x="19" y="9" width="3" height="6" rx="0.5"/><rect x="5" y="10.5" width="2" height="3"/><rect x="17" y="10.5" width="2" height="3"/><path d="M7 12h10"/></svg> },
+]
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
+  return isMobile
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  pending: 'bg-gray-100 text-gray-600',
-  transcribing: 'bg-blue-100 text-blue-700',
-  parsing: 'bg-blue-100 text-blue-700',
-  ready: 'bg-green-100 text-green-700',
-  error: 'bg-red-100 text-red-700',
+const PIPELINE_STEPS = [
+  { key: 'upload',  label: 'Áudio enviado' },
+  { key: 'whisper', label: 'Whisper · pt-BR',          sub: 'transcrição do áudio' },
+  { key: 'claude',  label: 'Claude Haiku · estruturação', sub: 'identificando exercícios' },
+  { key: 'youtube', label: 'YouTube API · demonstrações', sub: 'buscando vídeos' },
+  { key: 'compose', label: 'Compondo ficha final' },
+]
+
+function getStepState(status: string, stepKey: string): 'done' | 'active' | 'pending' {
+  const order = ['upload', 'whisper', 'claude', 'youtube', 'compose']
+  const idx = order.indexOf(stepKey)
+  if (status === 'ready') return idx <= 4 ? 'done' : 'pending'
+  if (status === 'transcribing') return idx === 0 ? 'done' : idx === 1 ? 'active' : 'pending'
+  if (status === 'parsing')      return idx <= 1 ? 'done' : idx === 2 ? 'active' : 'pending'
+  if (status === 'pending')      return idx === 0 ? 'active' : 'pending'
+  return 'pending'
 }
 
 export default function DashboardPage() {
   const { trainer, clearAuth } = useAuthStore()
-  const [tab, setTab] = useState<'workouts' | 'athletes'>('workouts')
+  const isMobile = useIsMobile()
+  const [view, setView] = useState<TrainerView>('home')
   const [loadingData, setLoadingData] = useState(true)
 
-  // Athletes
   const [athletes, setAthletes] = useState<Athlete[]>([])
   const [showAddAthlete, setShowAddAthlete] = useState(false)
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [addingAthlete, setAddingAthlete] = useState(false)
   const [athleteError, setAthleteError] = useState<string | null>(null)
+  const [athleteSearch, setAthleteSearch] = useState('')
 
-  // Workouts
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [selectedAthleteId, setSelectedAthleteId] = useState('')
+  const [workoutName, setWorkoutName] = useState('')
   const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio')
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [workoutText, setWorkoutText] = useState('')
   const [isRecording, setIsRecording] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [processing, setProcessing] = useState(false)
-  const [processingStatus, setProcessingStatus] = useState('')
+  const [processingWorkout, setProcessingWorkout] = useState<Workout | null>(null)
   const [processingError, setProcessingError] = useState<string | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
+  const [waveformBars, setWaveformBars] = useState<number[]>(() =>
+    Array.from({ length: 60 }, (_, i) => Math.max(0.1, Math.sin(i * 0.4) * 0.5 + 0.4))
+  )
+  const [detectedExercises, setDetectedExercises] = useState<Exercise[]>([])
 
-  // Workout detail
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null)
   const [exercises, setExercises] = useState<Record<string, Exercise[]>>({})
   const [loadingExercises, setLoadingExercises] = useState(false)
 
   useEffect(() => {
-    if (!trainer) {
-      setLoadingData(false)
-      return
-    }
+    if (!trainer) { setLoadingData(false); return }
     Promise.all([getAthletes(trainer.id), getWorkouts(trainer.id)])
-      .then(([a, w]) => {
-        setAthletes(a)
-        setWorkouts(w)
-      })
+      .then(([a, w]) => { setAthletes(a); setWorkouts(w) })
       .catch(console.error)
       .finally(() => setLoadingData(false))
   }, [trainer])
 
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    clearAuth()
-  }
+  useEffect(() => {
+    if (!isRecording) { setRecordingSeconds(0); return }
+    const t = setInterval(() => setRecordingSeconds((s) => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [isRecording])
+
+  useEffect(() => {
+    if (!isRecording) return
+    const t = setInterval(() => {
+      setWaveformBars((p) => { const n = [...p]; n.shift(); n.push(Math.max(0.1, Math.random() * 0.9 + 0.1)); return n })
+    }, 80)
+    return () => clearInterval(t)
+  }, [isRecording])
+
+  async function handleSignOut() { await supabase.auth.signOut(); clearAuth() }
 
   async function handleAddAthlete(e: React.FormEvent) {
-    e.preventDefault()
-    setAthleteError(null)
-    setAddingAthlete(true)
-    const athlete = await createAthlete(newName, newEmail)
-    if (!athlete) {
-      setAthleteError('Não foi possível adicionar. Verifique se o email já está cadastrado.')
-    } else {
-      setAthletes((prev) => [athlete, ...prev])
-      setNewName('')
-      setNewEmail('')
-      setShowAddAthlete(false)
-    }
+    e.preventDefault(); setAthleteError(null); setAddingAthlete(true)
+    const a = await createAthlete(newName, newEmail)
+    if (!a) setAthleteError('Não foi possível adicionar.')
+    else { setAthletes((p) => [a, ...p]); setNewName(''); setNewEmail(''); setShowAddAthlete(false) }
     setAddingAthlete(false)
   }
 
@@ -106,393 +124,532 @@ export default function DashboardPage() {
         setAudioFile(new File([blob], `gravacao-${Date.now()}.webm`, { type: 'audio/webm' }))
         stream.getTracks().forEach((t) => t.stop())
       }
-      mr.start()
-      mediaRecorderRef.current = mr
-      setIsRecording(true)
-    } catch {
-      setProcessingError('Não foi possível acessar o microfone.')
-    }
+      mr.start(); mediaRecorderRef.current = mr; setIsRecording(true)
+    } catch { setProcessingError('Não foi possível acessar o microfone.') }
   }
 
-  function handleStopRecording() {
-    mediaRecorderRef.current?.stop()
-    setIsRecording(false)
-  }
+  function handleStopRecording() { mediaRecorderRef.current?.stop(); setIsRecording(false) }
 
-  async function handleProcessWorkout(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleProcessWorkout() {
     if (!selectedAthleteId) return
     if (inputMode === 'audio' && !audioFile) return
     if (inputMode === 'text' && !workoutText.trim()) return
-    setProcessing(true)
-    setProcessingError(null)
-    setProcessingStatus('Criando treino...')
-
-    const workout = await createWorkout({ athlete_id: selectedAthleteId })
-    if (!workout) {
-      setProcessingError('Não foi possível criar o treino. Tente novamente.')
-      setProcessing(false)
-      return
-    }
-
-    setWorkouts((prev) => [workout, ...prev])
-    setProcessingStatus('Transcrevendo áudio (pode levar alguns segundos)...')
-
-    let result: Awaited<ReturnType<typeof processWorkoutAudio>>
-    if (inputMode === 'text') {
-      setProcessingStatus('Analisando treino com IA...')
-      result = await processWorkoutText(workout.id, workoutText)
-    } else {
-      setProcessingStatus('Transcrevendo áudio (pode levar alguns segundos)...')
-      result = await processWorkoutAudio(workout.id, audioFile!)
-    }
-
-    if (!result) {
-      setProcessingError('Falha ao processar o treino. Verifique as chaves de API e tente novamente.')
-    } else {
-      setAudioFile(null)
-      setWorkoutText('')
-      setSelectedAthleteId('')
-      if (trainer) {
-        const updated = await getWorkouts(trainer.id)
-        setWorkouts(updated)
-      }
-    }
-
-    setProcessing(false)
-    setProcessingStatus('')
+    setProcessing(true); setProcessingError(null); setDetectedExercises([])
+    const workout = await createWorkout({ athlete_id: selectedAthleteId, name: workoutName.trim() || undefined })
+    if (!workout) { setProcessingError('Não foi possível criar o treino.'); setProcessing(false); return }
+    setProcessingWorkout(workout); setWorkouts((p) => [workout, ...p]); setView('processing')
+    const result = inputMode === 'text' ? await processWorkoutText(workout.id, workoutText) : await processWorkoutAudio(workout.id, audioFile!)
+    if (!result) { setProcessingError('Falha ao processar. Verifique as chaves de API.'); setProcessing(false); return }
+    if (trainer) { const updated = await getWorkouts(trainer.id); setWorkouts(updated); setDetectedExercises(await getExercises(workout.id)) }
+    setAudioFile(null); setWorkoutText(''); setWorkoutName(''); setProcessing(false)
   }
 
   async function handleToggleWorkout(workout: Workout) {
-    if (expandedWorkoutId === workout.id) {
-      setExpandedWorkoutId(null)
-      return
-    }
+    if (expandedWorkoutId === workout.id) { setExpandedWorkoutId(null); return }
     setExpandedWorkoutId(workout.id)
     if (workout.status === 'ready' && !exercises[workout.id]) {
       setLoadingExercises(true)
       const ex = await getExercises(workout.id)
-      setExercises((prev) => ({ ...prev, [workout.id]: ex }))
+      setExercises((p) => ({ ...p, [workout.id]: ex }))
       setLoadingExercises(false)
     }
   }
 
-  function copyInviteLink(athlete: Athlete) {
-    const link = `${window.location.origin}/invite/${athlete.invite_token}`
-    navigator.clipboard.writeText(link)
-  }
+  function copyInviteLink(a: Athlete) { navigator.clipboard.writeText(`${window.location.origin}/invite/${a.invite_token}`) }
+
+  const recMin = String(Math.floor(recordingSeconds / 60)).padStart(2, '0')
+  const recSec = String(recordingSeconds % 60).padStart(2, '0')
+  const selectedAthlete = athletes.find((a) => a.id === selectedAthleteId)
+  const processingStatus = processingWorkout ? (workouts.find((w) => w.id === processingWorkout.id)?.status ?? processingWorkout.status) : ''
 
   if (loadingData) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <LoadingSpinner size="lg" message="Carregando..." />
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <LoadingSpinner size="lg" message="Carregando..."/>
       </div>
     )
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">FitFlow</h1>
-          <p className="text-sm text-gray-500">{trainer?.name}</p>
-        </div>
-        <button
-          onClick={handleSignOut}
-          className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
-        >
+  // ── Layout shell ──────────────────────────────────────────────────────────
+  const Card = ({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) => (
+    <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', ...style }}>
+      {children}
+    </div>
+  )
+
+  const inp: React.CSSProperties = { width: '100%', height: 44, padding: '0 14px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none' }
+
+  // ── Sidebar (desktop) ─────────────────────────────────────────────────────
+  const sidebar = !isMobile && (
+    <div style={{ width: 220, minHeight: '100vh', background: 'var(--ink-1)', borderRight: '1px solid var(--ink-4)', padding: '24px 14px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      <div style={{ padding: '0 8px 28px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <FFWordmark size={15}/>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+        {NAV_ITEMS.map(({ key, label, icon }) => {
+          const active = view === key || (key === 'workouts' && (view === 'recording' || view === 'processing'))
+          return (
+            <button key={key} onClick={() => setView(key)}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--r-md)', background: active ? 'var(--accent-soft)' : 'transparent', color: active ? 'var(--accent)' : 'var(--fg-2)', fontSize: 14, border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%' }}>
+              {icon(active ? 'var(--accent)' : 'var(--fg-2)')}
+              {label}
+            </button>
+          )
+        })}
+      </div>
+      <div style={{ padding: '16px 0 8px', borderTop: '1px solid var(--ink-4)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button onClick={() => setView('recording')}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}>
+          {FFIcon.mic(16, 'var(--accent-ink)')} Novo Treino
+        </button>
+        <button onClick={handleSignOut} style={{ fontSize: 12, color: 'var(--fg-1)', background: 'none', border: '1px solid var(--fg-2)', borderRadius: 999, cursor: 'pointer', padding: '6px 14px', fontFamily: "'JetBrains Mono', monospace', width: '100%'" }}>
           Sair
         </button>
-      </header>
+      </div>
+    </div>
+  )
 
-      <main className="max-w-3xl mx-auto px-6 py-8">
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
-          <button
-            onClick={() => setTab('workouts')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              tab === 'workouts' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-            }`}
-          >
-            Treinos
+  // ── Mobile header ─────────────────────────────────────────────────────────
+  const mobileHeader = isMobile && (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--ink-4)', background: 'var(--ink-1)', position: 'sticky', top: 0, zIndex: 40 }}>
+      <FFWordmark size={14}/>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button onClick={() => setView('recording')}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, height: 38, padding: '0 14px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          {FFIcon.mic(14, 'var(--accent-ink)')} Novo Treino
+        </button>
+        <button onClick={handleSignOut}
+          style={{ height: 38, padding: '0 12px', borderRadius: 999, background: 'transparent', color: 'var(--fg-1)', border: '1px solid var(--fg-2)', fontSize: 12, cursor: 'pointer', fontFamily: "'JetBrains Mono', monospace" }}>
+          Sair
+        </button>
+      </div>
+    </div>
+  )
+
+  // ── Mobile bottom nav ─────────────────────────────────────────────────────
+  const mobileBottomNav = isMobile && (
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'var(--ink-1)', borderTop: '1px solid var(--ink-4)', display: 'flex', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      {NAV_ITEMS.map(({ key, label, icon }) => {
+        const active = view === key || (key === 'workouts' && (view === 'recording' || view === 'processing'))
+        return (
+          <button key={key} onClick={() => setView(key)}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 4px', background: 'none', border: 'none', color: active ? 'var(--accent)' : 'var(--fg-3)', fontSize: 10, cursor: 'pointer' }}>
+            {icon(active ? 'var(--accent)' : 'var(--fg-3)')}
+            {label}
           </button>
-          <button
-            onClick={() => setTab('athletes')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              tab === 'athletes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-            }`}
-          >
-            Atletas ({athletes.length})
-          </button>
-        </div>
+        )
+      })}
+    </div>
+  )
 
-        {/* ── Workouts Tab ── */}
-        {tab === 'workouts' && (
-          <div className="space-y-6">
-            {/* Create workout */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-6">
-              <h2 className="font-semibold text-gray-900 mb-4">Novo treino</h2>
-              {athletes.length === 0 ? (
-                <p className="text-sm text-gray-500">
-                  Adicione um atleta na aba <strong>Atletas</strong> antes de criar treinos.
-                </p>
-              ) : (
-                <form onSubmit={handleProcessWorkout} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Atleta</label>
-                    <select
-                      required
-                      value={selectedAthleteId}
-                      onChange={(e) => setSelectedAthleteId(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">Selecione um atleta</option>
-                      {athletes.map((a) => (
-                        <option key={a.id} value={a.id}>{a.name}</option>
-                      ))}
-                    </select>
-                  </div>
+  const contentPad = isMobile ? '20px 20px' : '32px 40px'
+  const contentStyle: React.CSSProperties = { flex: 1, overflow: 'auto', padding: contentPad, paddingBottom: isMobile ? '90px' : '40px' }
 
-                  <div>
-                    <div className="flex gap-1 mb-3 bg-gray-100 rounded-lg p-1 w-fit">
-                      <button
-                        type="button"
-                        onClick={() => setInputMode('audio')}
-                        className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${inputMode === 'audio' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-                      >
-                        Áudio
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setInputMode('text')}
-                        className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${inputMode === 'text' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-                      >
-                        Texto
-                      </button>
-                    </div>
+  // ── HOME VIEW ─────────────────────────────────────────────────────────────
+  const homeView = (
+    <div style={contentStyle}>
+      <div style={{ marginBottom: 28 }}>
+        <div className="display" style={{ fontSize: isMobile ? 32 : 40 }}>Dashboard</div>
+        <div style={{ fontSize: 14, color: 'var(--fg-3)', marginTop: 4 }}>Bem-vindo de volta, {trainer?.name?.split(' ')[0] ?? 'Coach'}</div>
+      </div>
 
-                    {inputMode === 'audio' ? (
-                      <>
-                        <div className="flex flex-wrap gap-2 items-center">
-                          {!isRecording ? (
-                            <button
-                              type="button"
-                              onClick={handleStartRecording}
-                              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                            >
-                              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-                              Gravar
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={handleStopRecording}
-                              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 text-sm text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
-                            >
-                              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
-                              Parar gravação
-                            </button>
-                          )}
-                          <span className="text-gray-400 text-sm">ou</span>
-                          <label className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
-                            Enviar arquivo
-                            <input
-                              type="file"
-                              accept="audio/*"
-                              className="hidden"
-                              onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
-                            />
-                          </label>
-                        </div>
-                        {audioFile && (
-                          <p className="mt-2 text-sm text-green-600">✓ {audioFile.name}</p>
-                        )}
-                      </>
-                    ) : (
-                      <textarea
-                        value={workoutText}
-                        onChange={(e) => setWorkoutText(e.target.value)}
-                        placeholder="Descreva o treino... Ex: Agachamento 4x12 descanso 60s, Supino 3x10 descanso 90s..."
-                        rows={5}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
-                      />
-                    )}
-                  </div>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', gap: 14, marginBottom: 28 }}>
+        {[
+          { icon: FFIcon.dumbbell, label: 'Alunos ativos', value: athletes.length },
+          { icon: FFIcon.spark,    label: 'Treinos criados', value: workouts.length },
+          { icon: FFIcon.flame,    label: 'Esta semana', value: workouts.filter((w) => (Date.now() - new Date(w.created_at).getTime()) < 7 * 86400000).length },
+        ].map((s, i) => (
+          <Card key={i} style={{ padding: '18px 16px' }}>
+            <div style={{ color: 'var(--accent)', marginBottom: 10 }}>{s.icon(14, 'var(--accent)')}</div>
+            <div className="display" style={{ fontSize: 32 }}>{s.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>{s.label}</div>
+          </Card>
+        ))}
+      </div>
 
-                  {processingError && (
-                    <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{processingError}</p>
-                  )}
-
-                  {processing && processingStatus && (
-                    <p className="text-sm text-blue-600">{processingStatus}</p>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={
-                      !selectedAthleteId ||
-                      processing ||
-                      isRecording ||
-                      (inputMode === 'audio' ? !audioFile : !workoutText.trim())
-                    }
-                    className="w-full py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
-                  >
-                    {processing ? 'Processando...' : 'Processar treino'}
-                  </button>
-                </form>
-              )}
-            </div>
-
-            {/* Workouts list */}
-            <div className="space-y-2">
-              {workouts.length === 0 && !processing && (
-                <p className="text-sm text-gray-400 text-center py-8">Nenhum treino criado ainda.</p>
-              )}
-              {workouts.map((w) => {
-                const athlete = athletes.find((a) => a.id === w.athlete_id)
-                const isExpanded = expandedWorkoutId === w.id
-                return (
-                  <div key={w.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <button
-                      onClick={() => handleToggleWorkout(w)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{athlete?.name ?? '—'}</p>
-                        <p className="text-xs text-gray-400">
-                          {new Date(w.created_at).toLocaleDateString('pt-BR', {
-                            day: '2-digit', month: 'short', year: 'numeric',
-                          })}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[w.status]}`}>
-                          {STATUS_LABEL[w.status]}
-                        </span>
-                        <span className="text-gray-300 text-xs">{isExpanded ? '▲' : '▼'}</span>
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="border-t border-gray-100 px-4 py-3">
-                        {w.status === 'ready' && (
-                          loadingExercises && !exercises[w.id] ? (
-                            <LoadingSpinner size="sm" message="Carregando exercícios..." />
-                          ) : (exercises[w.id] ?? []).length === 0 ? (
-                            <p className="text-sm text-gray-400">Nenhum exercício encontrado.</p>
-                          ) : (
-                            <ul className="space-y-2">
-                              {(exercises[w.id] ?? []).map((ex, i) => (
-                                <li key={ex.id} className="text-sm">
-                                  <span className="font-medium text-gray-800">{i + 1}. {ex.name}</span>
-                                  <span className="text-gray-500 ml-2">
-                                    {ex.sets} séries × {ex.reps} reps — {ex.rest_seconds}s descanso
-                                  </span>
-                                  {ex.notes && (
-                                    <p className="text-xs text-gray-400 mt-0.5 ml-4">{ex.notes}</p>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          )
-                        )}
-                        {w.status === 'error' && (
-                          <p className="text-sm text-red-500">Falha ao processar o treino.</p>
-                        )}
-                        {(w.status === 'transcribing' || w.status === 'parsing') && (
-                          <LoadingSpinner size="sm" message={STATUS_LABEL[w.status]} />
-                        )}
-                        {w.status === 'pending' && (
-                          <p className="text-sm text-gray-400">Aguardando processamento.</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 24 }}>
+        {/* Recent athletes */}
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--ink-4)' }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--accent)' }}>Alunos</div>
+            <button onClick={() => setView('athletes')} style={{ fontSize: 12, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+              Ver todos {FFIcon.chevR(10, 'var(--fg-3)')}
+            </button>
           </div>
-        )}
+          {athletes.length === 0 ? (
+            <div style={{ padding: '24px 20px', fontSize: 13, color: 'var(--fg-4)', textAlign: 'center' }}>Nenhum aluno ainda.</div>
+          ) : (
+            athletes.slice(0, 4).map((a, i) => {
+              const aw = workouts.filter((w) => w.athlete_id === a.id)
+              const adh = aw.length > 0 ? Math.min(1, aw.filter((w) => w.status === 'ready').length / Math.max(aw.length, 1)) : 0
+              return (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: i < Math.min(athletes.length, 4) - 1 ? '1px solid var(--ink-4)' : 'none' }}>
+                  <FFAvatar name={a.name} size={36} tone="warm"/>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{aw.length > 0 ? `${aw.length} treinos` : 'Sem sessões'}</div>
+                    {aw.length > 0 && <div style={{ marginTop: 6 }}><FFMeter value={adh}/></div>}
+                  </div>
+                  <div className="num" style={{ fontSize: 12, color: 'var(--fg-2)', flexShrink: 0 }}>{Math.round(adh * 100)}%</div>
+                </div>
+              )
+            })
+          )}
+        </Card>
 
-        {/* ── Athletes Tab ── */}
-        {tab === 'athletes' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="font-semibold text-gray-900">Seus atletas</h2>
-              <button
-                onClick={() => { setShowAddAthlete(true); setAthleteError(null) }}
-                className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                + Adicionar
+        {/* Audio CTA */}
+        <Card style={{ padding: '32px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 16, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, left: 40, right: 40, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.5 }}/>
+          <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {FFIcon.mic(22, 'var(--accent)')}
+          </div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--accent)', marginBottom: 8 }}>Criação por Áudio</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.6 }}>Grave um áudio descrevendo o treino e a IA estrutura tudo automaticamente.</div>
+          </div>
+          <button onClick={() => setView('recording')}
+            style={{ height: 46, padding: '0 24px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {FFIcon.mic(16, 'var(--accent-ink)')} Gravar Treino
+          </button>
+        </Card>
+      </div>
+    </div>
+  )
+
+  // ── ATHLETES VIEW ─────────────────────────────────────────────────────────
+  const filteredAthletes = athletes.filter((a) => a.name.toLowerCase().includes(athleteSearch.toLowerCase()) || a.email.toLowerCase().includes(athleteSearch.toLowerCase()))
+
+  const athletesView = (
+    <div style={contentStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
+        <div className="display" style={{ fontSize: isMobile ? 30 : 36 }}>Alunos</div>
+        <button onClick={() => setShowAddAthlete(true)}
+          style={{ height: 42, padding: '0 18px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {FFIcon.plus(16, 'var(--accent-ink)')} Adicionar
+        </button>
+      </div>
+
+      {/* Search */}
+      <div style={{ position: 'relative', marginBottom: 24 }}>
+        <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-3)' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35" strokeLinecap="round"/></svg>
+        </div>
+        <input value={athleteSearch} onChange={(e) => setAthleteSearch(e.target.value)} placeholder="Buscar aluno..." style={{ ...inp, paddingLeft: 42 }}/>
+      </div>
+
+      {showAddAthlete && (
+        <Card style={{ padding: 20, marginBottom: 20 }}>
+          <div style={{ fontSize: 13, color: 'var(--fg-2)', marginBottom: 16 }}>Novo atleta</div>
+          <form onSubmit={handleAddAthlete} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <input type="text" required value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nome completo" style={inp}/>
+            <input type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Email" style={inp}/>
+            {athleteError && <div style={{ fontSize: 12, color: 'var(--danger)' }}>{athleteError}</div>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="submit" disabled={addingAthlete} style={{ flex: 1, height: 42, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                {addingAthlete ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button type="button" onClick={() => { setShowAddAthlete(false); setAthleteError(null) }} style={{ flex: 1, height: 42, borderRadius: 999, background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--ink-4)', fontSize: 14, cursor: 'pointer' }}>
+                Cancelar
               </button>
             </div>
+          </form>
+        </Card>
+      )}
 
-            {showAddAthlete && (
-              <form onSubmit={handleAddAthlete} className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
-                <h3 className="text-sm font-medium text-gray-900">Novo atleta</h3>
-                <input
-                  type="text"
-                  required
-                  placeholder="Nome"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-                <input
-                  type="email"
-                  required
-                  placeholder="Email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-                {athleteError && <p className="text-sm text-red-600">{athleteError}</p>}
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    disabled={addingAthlete}
-                    className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {addingAthlete ? 'Salvando...' : 'Salvar'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowAddAthlete(false); setAthleteError(null) }}
-                    className="px-4 py-1.5 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {athletes.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">Nenhum atleta cadastrado.</p>
-            ) : (
-              <ul className="space-y-2">
-                {athletes.map((a) => (
-                  <li
-                    key={a.id}
-                    className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{a.name}</p>
-                      <p className="text-xs text-gray-400">{a.email}</p>
+      {filteredAthletes.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg-4)', fontSize: 14 }}>
+          {athletes.length === 0 ? 'Nenhum atleta cadastrado ainda.' : 'Nenhum resultado.'}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {filteredAthletes.map((a) => {
+            const aw = workouts.filter((w) => w.athlete_id === a.id)
+            const adh = aw.length > 0 ? Math.min(1, aw.filter((w) => w.status === 'ready').length / Math.max(aw.length, 1)) : 0
+            const lastWorkout = aw[0]
+            return (
+              <Card key={a.id} style={{ padding: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+                  <FFAvatar name={a.name} size={44} tone="warm"/>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                      {FFIcon.chevR(14, 'var(--fg-4)')}
                     </div>
-                    <button
-                      onClick={() => copyInviteLink(a)}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      Copiar link
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+                    <div style={{ fontSize: 12, color: aw.length > 0 ? 'var(--accent)' : 'var(--fg-3)', marginTop: 2 }}>
+                      {aw.length > 0 ? 'Ativo' : 'Pendente'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 10 }}>
+                  Último treino:{' '}
+                  <strong style={{ color: 'var(--fg-2)' }}>
+                    {lastWorkout ? new Date(lastWorkout.created_at).toLocaleDateString('pt-BR', { weekday: 'long' }) : 'Sem sessões'}
+                  </strong>
+                </div>
+                {aw.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ flex: 1 }}><FFMeter value={adh}/></div>
+                    <span className="num" style={{ fontSize: 12, color: 'var(--fg-2)', flexShrink: 0 }}>{Math.round(adh * 100)}%</span>
+                  </div>
+                )}
+                <button onClick={() => copyInviteLink(a)} style={{ marginTop: 14, width: '100%', height: 36, borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer' }}>
+                  Copiar link de convite
+                </button>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
+  // ── WORKOUTS VIEW ─────────────────────────────────────────────────────────
+  const statusColor: Record<string, string> = { ready: 'var(--success)', transcribing: 'var(--accent)', parsing: 'var(--accent)', error: 'var(--danger)', pending: 'var(--fg-4)' }
+  const statusLabel: Record<string, string> = { ready: 'Pronto', transcribing: 'Transcrevendo', parsing: 'Analisando', error: 'Erro', pending: 'Pendente' }
+
+  const workoutsView = (
+    <div style={contentStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, gap: 12 }}>
+        <div className="display" style={{ fontSize: isMobile ? 30 : 36 }}>Treinos</div>
+        <button onClick={() => setView('recording')}
+          style={{ height: 42, padding: '0 18px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {FFIcon.mic(14, 'var(--accent-ink)')} Novo
+        </button>
+      </div>
+
+      {workouts.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg-4)', fontSize: 14 }}>Nenhum treino criado ainda.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {workouts.map((w) => {
+            const athlete = athletes.find((a) => a.id === w.athlete_id)
+            const expanded = expandedWorkoutId === w.id
+            return (
+              <Card key={w.id} style={{ padding: 0, overflow: 'hidden' }}>
+                <button onClick={() => handleToggleWorkout(w)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'none', border: 'none', color: 'var(--fg-1)', cursor: 'pointer', textAlign: 'left' }}>
+                  <FFAvatar name={athlete?.name ?? '?'} size={38}/>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{athlete?.name ?? '—'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {w.name ?? 'Treino sem nome'}
+                    </div>
+                    <div className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginTop: 1 }}>
+                      {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor[w.status] ?? 'var(--fg-4)', flexShrink: 0 }}/>
+                    <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>{statusLabel[w.status] ?? w.status}</span>
+                    {FFIcon.chevR(12, expanded ? 'var(--accent)' : 'var(--fg-4)')}
+                  </div>
+                </button>
+                {expanded && (
+                  <div style={{ borderTop: '1px solid var(--ink-4)', padding: '14px 18px' }}>
+                    {w.status === 'ready' && (
+                      loadingExercises && !exercises[w.id]
+                        ? <LoadingSpinner size="sm" message="Carregando..."/>
+                        : (exercises[w.id] ?? []).length === 0
+                          ? <div style={{ fontSize: 12, color: 'var(--fg-4)' }}>Nenhum exercício.</div>
+                          : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {(exercises[w.id] ?? []).map((ex, i) => (
+                                <div key={ex.id} style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <span className="num" style={{ fontSize: 10, color: 'var(--accent)' }}>{i + 1}</span>
+                                  </div>
+                                  <div>
+                                    <div style={{ fontSize: 13 }}>{ex.name}</div>
+                                    <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{ex.sets} séries · Descanso {ex.rest_seconds}s</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                    )}
+                    {w.status === 'error' && <div style={{ fontSize: 12, color: 'var(--danger)' }}>Falha ao processar.</div>}
+                    {['transcribing', 'parsing', 'pending'].includes(w.status) && <LoadingSpinner size="sm" message={statusLabel[w.status]}/>}
+                  </div>
+                )}
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
+  // ── RECORDING VIEW ────────────────────────────────────────────────────────
+  const recordingView = (
+    <div style={contentStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Novo treino · gravação</div>
+          <div className="display" style={{ fontSize: isMobile ? 28 : 36 }}>
+            Para <span style={{ fontStyle: 'italic' }}>{selectedAthlete?.name ?? 'selecione um atleta'}</span>
           </div>
+        </div>
+        <button onClick={() => { setView('workouts'); setAudioFile(null); setWorkoutText('') }}
+          style={{ height: 38, padding: '0 16px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-2)', fontSize: 13, cursor: 'pointer' }}>
+          Cancelar
+        </button>
+      </div>
+
+      {/* Athlete + name + mode selector */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+        <select value={selectedAthleteId} onChange={(e) => setSelectedAthleteId(e.target.value)}
+          style={{ ...inp, flex: '1 1 180px', height: 44 }}>
+          <option value="">Selecione o atleta</option>
+          {athletes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <input value={workoutName} onChange={(e) => setWorkoutName(e.target.value)}
+          placeholder="Nome do treino (ex: Pernas A)"
+          style={{ ...inp, flex: '1 1 180px', height: 44 }}/>
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--ink-2)', borderRadius: 999, border: '1px solid var(--ink-4)', alignSelf: 'center' }}>
+          {(['audio', 'text'] as const).map((m) => (
+            <button key={m} onClick={() => setInputMode(m)}
+              style={{ height: 34, padding: '0 16px', borderRadius: 999, fontSize: 13, fontWeight: 500, background: inputMode === m ? 'var(--ink-3)' : 'transparent', color: inputMode === m ? 'var(--fg-1)' : 'var(--fg-3)', border: inputMode === m ? '1px solid var(--ink-4)' : '1px solid transparent', cursor: 'pointer' }}>
+              {m === 'audio' ? 'Áudio' : 'Texto'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Card style={{ padding: isMobile ? '28px 20px' : '40px 36px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: 0, left: 40, right: 40, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.5 }}/>
+
+        {inputMode === 'audio' ? (
+          <>
+            {/* Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: isRecording ? 'var(--accent)' : 'var(--fg-4)', boxShadow: isRecording ? '0 0 10px var(--accent)' : 'none', ...(isRecording ? { animation: 'ff-pulse 1s ease-in-out infinite' } : {}) }}/>
+              <div className="eyebrow" style={{ color: isRecording ? 'var(--accent)' : 'var(--fg-3)' }}>
+                {isRecording ? `Gravando · ${recMin}:${recSec}` : audioFile ? `Pronto · ${audioFile.name}` : 'Aguardando'}
+              </div>
+            </div>
+            {/* Waveform */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 100, marginBottom: 28 }}>
+              {waveformBars.map((h, i) => (
+                <div key={i} style={{ flex: 1, height: `${h * 100}%`, borderRadius: 2, background: i === waveformBars.length - 1 && isRecording ? 'var(--accent)' : isRecording ? 'var(--fg-1)' : 'var(--ink-4)', opacity: isRecording ? 1 : 0.3 }}/>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', paddingTop: 20, borderTop: '1px solid var(--ink-4)' }}>
+              <button onClick={isRecording ? handleStopRecording : handleStartRecording}
+                style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--accent)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: isRecording ? '0 0 0 8px var(--accent-soft)' : 'none', flexShrink: 0 }}>
+                {isRecording ? FFIcon.stop(18, 'var(--accent-ink)') : FFIcon.mic(20, 'var(--accent-ink)')}
+              </button>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, color: 'var(--fg-1)' }}>{isRecording ? 'Toque para parar' : 'Toque para gravar'}</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 3 }}>Fale naturalmente — a IA estrutura tudo.</div>
+              </div>
+              <label style={{ cursor: 'pointer' }}>
+                <span style={{ fontSize: 13, color: 'var(--fg-3)', textDecoration: 'underline' }}>ou enviar arquivo</span>
+                <input type="file" accept="audio/*" style={{ display: 'none' }} onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}/>
+              </label>
+              <button onClick={handleProcessWorkout} disabled={!selectedAthleteId || processing || isRecording || !audioFile}
+                style={{ height: 46, padding: '0 22px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (!selectedAthleteId || processing || isRecording || !audioFile) ? 0.5 : 1 }}>
+                {processing ? 'Processando...' : 'Finalizar e processar'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <textarea value={workoutText} onChange={(e) => setWorkoutText(e.target.value)}
+              placeholder="Descreva o treino... Ex: Agachamento 4×10 com 60kg, descanso 90s..."
+              style={{ width: '100%', minHeight: 180, padding: '16px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 15, color: 'var(--fg-1)', resize: 'vertical', outline: 'none', lineHeight: 1.6 }}/>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button onClick={handleProcessWorkout} disabled={!selectedAthleteId || processing || !workoutText.trim()}
+                style={{ height: 46, padding: '0 24px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (!selectedAthleteId || processing || !workoutText.trim()) ? 0.5 : 1 }}>
+                {processing ? 'Processando...' : 'Processar treino'}
+              </button>
+            </div>
+          </>
         )}
-      </main>
+        {processingError && <div style={{ marginTop: 14, padding: '10px 14px', background: 'color-mix(in oklch, var(--danger), black 70%)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--danger)' }}>{processingError}</div>}
+      </Card>
+    </div>
+  )
+
+  // ── PROCESSING VIEW ───────────────────────────────────────────────────────
+  const processingAthleteObj = athletes.find((a) => a.id === selectedAthleteId)
+
+  const processingView = (
+    <div style={contentStyle}>
+      <div style={{ marginBottom: 28 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>Processamento</div>
+        <div className="display" style={{ fontSize: isMobile ? 28 : 36 }}>A IA está montando a ficha<span style={{ fontStyle: 'italic' }}> —</span></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '300px 1fr', gap: 24 }}>
+        {/* Pipeline */}
+        <Card style={{ padding: '18px 20px' }}>
+          <div className="eyebrow" style={{ marginBottom: 16 }}>Pipeline</div>
+          {PIPELINE_STEPS.map((step, i) => {
+            const state = getStepState(processingStatus, step.key)
+            const color = state === 'done' ? 'var(--accent)' : state === 'active' ? 'var(--fg-1)' : 'var(--fg-4)'
+            return (
+              <div key={step.key} style={{ display: 'flex', gap: 12, paddingBottom: i < PIPELINE_STEPS.length - 1 ? 14 : 0, position: 'relative' }}>
+                {i < PIPELINE_STEPS.length - 1 && <div style={{ position: 'absolute', left: 7, top: 16, bottom: 0, width: 1, background: state === 'done' ? 'var(--accent)' : 'var(--ink-4)', opacity: 0.5 }}/>}
+                <div style={{ width: 15, height: 15, borderRadius: '50%', border: `1px solid ${color}`, background: state === 'done' ? 'var(--accent)' : 'var(--ink-2)', flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+                  {state === 'done' && <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent-ink)' }}/>}
+                  {state === 'active' && <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--fg-1)', animation: 'ff-pulse 1s ease-in-out infinite' }}/>}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, color: state === 'pending' ? 'var(--fg-4)' : 'var(--fg-1)' }}>{step.label}</div>
+                  {step.sub && <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{step.sub}</div>}
+                </div>
+              </div>
+            )
+          })}
+          {processing && <div style={{ marginTop: 16 }}><LoadingSpinner size="sm"/></div>}
+        </Card>
+
+        {/* Detected exercises */}
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 14 }}>Exercícios identificados · {detectedExercises.length}</div>
+          {processing && detectedExercises.length === 0 ? (
+            <Card style={{ padding: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><LoadingSpinner size="md" message="Identificando..."/></Card>
+          ) : detectedExercises.length === 0 ? (
+            <Card style={{ padding: 32, textAlign: 'center', color: 'var(--fg-4)', fontSize: 13 }}>Os exercícios aparecem aqui após o processamento.</Card>
+          ) : (
+            <>
+              <Card style={{ padding: 0, overflow: 'hidden' }}>
+                {detectedExercises.map((ex, i) => (
+                  <div key={ex.id} style={{ display: 'flex', gap: 14, padding: '14px 18px', borderBottom: i < detectedExercises.length - 1 ? '1px solid var(--ink-4)' : 'none', alignItems: 'center' }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span className="num" style={{ fontSize: 10, color: 'var(--accent)' }}>{i + 1}</span>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14 }}>{ex.name}</div>
+                      <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{ex.sets} séries · {ex.reps} reps{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''} · desc {ex.rest_seconds}s</div>
+                    </div>
+                  </div>
+                ))}
+              </Card>
+              <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <button onClick={() => setView('workouts')} style={{ height: 44, padding: '0 20px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-2)', fontSize: 14, cursor: 'pointer' }}>
+                  Ver dashboard
+                </button>
+                <button onClick={() => setView('home')} style={{ height: 44, padding: '0 22px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                  Enviar para {processingAthleteObj?.name?.split(' ')[0] ?? 'atleta'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ink-0)' }}>
+      {sidebar}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {mobileHeader}
+        {view === 'home'       && homeView}
+        {view === 'athletes'   && athletesView}
+        {view === 'workouts'   && workoutsView}
+        {view === 'recording'  && recordingView}
+        {view === 'processing' && processingView}
+      </div>
+      {mobileBottomNav}
     </div>
   )
 }

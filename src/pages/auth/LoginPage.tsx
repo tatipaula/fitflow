@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
+import { FFLogo, FFButton } from '@/components/ui'
 
 type Mode = 'login' | 'signup'
 
@@ -36,7 +37,6 @@ export default function LoginPage() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) setError(friendlyError(error.message))
-      // Se sucesso: onAuthStateChange em App.tsx detecta e redireciona automaticamente
     } catch {
       setError('Verifique sua conexão e tente novamente.')
     } finally {
@@ -50,19 +50,11 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
+        email, password,
         options: { data: { name } },
       })
-      if (error) {
-        setError(friendlyError(error.message))
-        return
-      }
-      // Sem sessão = email de confirmação enviado
-      if (!data.session) {
-        setEmailSent(true)
-      }
-      // Se session existe: onAuthStateChange detecta e redireciona automaticamente
+      if (error) { setError(friendlyError(error.message)); return }
+      if (!data.session) setEmailSent(true)
     } catch {
       setError('Verifique sua conexão e tente novamente.')
     } finally {
@@ -70,19 +62,33 @@ export default function LoginPage() {
     }
   }
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', height: 42, padding: '0 14px',
+    background: 'var(--ink-2)', border: '1px solid var(--ink-4)',
+    borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)',
+    outline: 'none',
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block', fontSize: 11, color: 'var(--fg-3)',
+    fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.1em',
+    textTransform: 'uppercase', marginBottom: 6,
+  }
+
   if (emailSent) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm text-center">
-          <h1 className="mb-4 text-2xl font-bold text-gray-900">FitFlow</h1>
-          <p className="text-gray-700 font-medium">Verifique seu email</p>
-          <p className="mt-2 text-sm text-gray-500">
-            Enviamos um link de confirmação para <strong>{email}</strong>. Clique no link para ativar
-            sua conta e entrar.
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 360, padding: '0 24px', textAlign: 'center' }}>
+          <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'center' }}>
+            <FFLogo size={36}/>
+          </div>
+          <div className="display" style={{ fontSize: 28, marginBottom: 12 }}>Verifique seu email</div>
+          <p style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.6 }}>
+            Enviamos um link de confirmação para <strong style={{ color: 'var(--fg-1)' }}>{email}</strong>. Clique no link para ativar sua conta.
           </p>
           <button
             onClick={() => { setEmailSent(false); setMode('login') }}
-            className="mt-6 text-sm text-blue-600 hover:underline"
+            style={{ marginTop: 24, fontSize: 12, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
           >
             Voltar para o login
           </button>
@@ -92,86 +98,74 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm">
-        <h1 className="mb-6 text-2xl font-bold text-gray-900">FitFlow</h1>
-
-        {/* Tabs */}
-        <div className="mb-6 flex rounded-lg bg-gray-100 p-1">
-          <button
-            type="button"
-            onClick={() => { setMode('login'); setError(null) }}
-            className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-              mode === 'login' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-            }`}
-          >
-            Entrar
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('signup'); setError(null) }}
-            className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-              mode === 'signup' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-            }`}
-          >
-            Criar conta
-          </button>
+    <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 380, padding: '0 24px' }}>
+        {/* Logo */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 40 }}>
+          <FFLogo size={40}/>
         </div>
 
-        <form onSubmit={mode === 'login' ? handleLogin : handleSignup} className="space-y-4">
-          {mode === 'signup' && (
+        {/* Card */}
+        <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', padding: '32px 28px', position: 'relative', overflow: 'hidden' }}>
+          {/* hairline */}
+          <div style={{ position: 'absolute', top: 0, left: 40, right: 40, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
+
+          <div className="display" style={{ fontSize: 30, marginBottom: 6 }}>
+            {mode === 'login' ? 'Entrar' : 'Criar conta'}
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--fg-3)', marginBottom: 28 }}>
+            {mode === 'login' ? 'Entre com seu email e senha.' : 'Comece a usar o FitFlow.'}
+          </p>
+
+          {/* Mode toggle */}
+          <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--ink-1)', borderRadius: 999, marginBottom: 24 }}>
+            {(['login', 'signup'] as Mode[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => { setMode(m); setError(null) }}
+                style={{
+                  flex: 1, height: 32, borderRadius: 999, fontSize: 12, fontWeight: 500, letterSpacing: 0.02,
+                  background: mode === m ? 'var(--ink-3)' : 'transparent',
+                  color: mode === m ? 'var(--fg-1)' : 'var(--fg-3)',
+                  border: mode === m ? '1px solid var(--ink-4)' : '1px solid transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                {m === 'login' ? 'Entrar' : 'Criar conta'}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={mode === 'login' ? handleLogin : handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {mode === 'signup' && (
+              <div>
+                <label style={labelStyle}>Nome</label>
+                <input type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome completo" style={inputStyle}/>
+              </div>
+            )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Seu nome completo"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
+              <label style={labelStyle}>Email</label>
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" style={inputStyle}/>
             </div>
-          )}
+            <div>
+              <label style={labelStyle}>Senha</label>
+              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={inputStyle}/>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="voce@email.com"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
+            {error && (
+              <div style={{ padding: '10px 14px', background: 'color-mix(in oklch, var(--danger), black 70%)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--danger)' }}>
+                {error}
+              </div>
+            )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
-          >
-            {submitting
-              ? mode === 'login' ? 'Entrando...' : 'Criando conta...'
-              : mode === 'login' ? 'Entrar' : 'Criar conta'}
-          </button>
-        </form>
+            <FFButton type="submit" variant="primary" size="lg" disabled={submitting} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
+              {submitting
+                ? (mode === 'login' ? 'Entrando...' : 'Criando conta...')
+                : (mode === 'login' ? 'Entrar' : 'Criar conta')}
+            </FFButton>
+          </form>
+        </div>
       </div>
     </div>
   )

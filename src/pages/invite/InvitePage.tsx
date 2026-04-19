@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getAthleteByInviteToken, linkAthleteAccount } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { FFLogo, FFButton } from '@/components/ui'
 import type { Athlete } from '@/types'
 
 export default function InvitePage() {
@@ -22,13 +23,11 @@ export default function InvitePage() {
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
 
-  // Redireciona se já autenticado como atleta
   useEffect(() => {
     if (role === 'athlete') navigate('/athlete', { replace: true })
     if (role === 'trainer') navigate('/trainer', { replace: true })
   }, [role])
 
-  // Busca atleta pelo token
   useEffect(() => {
     if (!token) { setNotFound(true); setLoadingAthlete(false); return }
     getAthleteByInviteToken(token).then((a) => {
@@ -49,23 +48,17 @@ export default function InvitePage() {
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
     if (!token) return
-    setError(null)
-    setSubmitting(true)
+    setError(null); setSubmitting(true)
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
+        email, password,
         options: { data: { role: 'athlete' } },
       })
       if (error) { setError(friendlyError(error.message)); return }
-
       if (data.session) {
-        // Sessão imediata (confirmação de email desativada)
         const linked = await linkAthleteAccount(token)
         if (!linked) setError('Não foi possível vincular sua conta. Tente novamente.')
-        // onAuthStateChange + initAuth cuidam do redirect
       } else {
-        // Email de confirmação enviado — salva token para vincular após confirmação
         localStorage.setItem('pending_invite_token', token)
         setEmailSent(true)
       }
@@ -79,14 +72,11 @@ export default function InvitePage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     if (!token) return
-    setError(null)
-    setSubmitting(true)
+    setError(null); setSubmitting(true)
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) { setError(friendlyError(error.message)); return }
-      // Tenta vincular caso ainda não esteja vinculado
       await linkAthleteAccount(token)
-      // onAuthStateChange + initAuth cuidam do redirect
     } catch {
       setError('Verifique sua conexão e tente novamente.')
     } finally {
@@ -94,20 +84,33 @@ export default function InvitePage() {
     }
   }
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', height: 42, padding: '0 14px',
+    background: 'var(--ink-2)', border: '1px solid var(--ink-4)',
+    borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none',
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block', fontSize: 11, color: 'var(--fg-3)',
+    fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.1em',
+    textTransform: 'uppercase', marginBottom: 6,
+  }
+
   if (loadingAthlete) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <LoadingSpinner size="lg" />
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <LoadingSpinner size="lg"/>
       </div>
     )
   }
 
   if (notFound) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-gray-500 font-medium">Link de convite inválido ou expirado.</p>
-          <p className="text-sm text-gray-400 mt-1">Peça um novo link ao seu personal trainer.</p>
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', padding: '0 24px' }}>
+          <FFLogo size={32} color="var(--fg-3)"/>
+          <p style={{ marginTop: 20, color: 'var(--fg-2)', fontWeight: 500 }}>Link de convite inválido ou expirado.</p>
+          <p style={{ marginTop: 6, fontSize: 13, color: 'var(--fg-3)' }}>Peça um novo link ao seu personal trainer.</p>
         </div>
       </div>
     )
@@ -115,13 +118,12 @@ export default function InvitePage() {
 
   if (emailSent) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm text-center">
-          <h1 className="mb-4 text-2xl font-bold text-gray-900">FitFlow</h1>
-          <p className="text-gray-700 font-medium">Verifique seu email</p>
-          <p className="mt-2 text-sm text-gray-500">
-            Enviamos um link de confirmação para <strong>{email}</strong>.
-            Após confirmar, seu acesso será ativado automaticamente.
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 360, padding: '0 24px', textAlign: 'center' }}>
+          <FFLogo size={36}/>
+          <div className="display" style={{ fontSize: 28, marginTop: 28, marginBottom: 12 }}>Verifique seu email</div>
+          <p style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.6 }}>
+            Enviamos um link de confirmação para <strong style={{ color: 'var(--fg-1)' }}>{email}</strong>. Após confirmar, seu acesso será ativado.
           </p>
         </div>
       </div>
@@ -129,76 +131,59 @@ export default function InvitePage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm">
-        <h1 className="mb-1 text-2xl font-bold text-gray-900">FitFlow</h1>
-        {athlete && (
-          <p className="mb-6 text-sm text-gray-500">
-            Olá, <strong>{athlete.name}</strong>! Configure seu acesso abaixo.
-          </p>
-        )}
-
-        {/* Tabs */}
-        <div className="mb-6 flex rounded-lg bg-gray-100 p-1">
-          <button
-            type="button"
-            onClick={() => { setMode('signup'); setError(null) }}
-            className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-              mode === 'signup' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-            }`}
-          >
-            Criar senha
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('login'); setError(null) }}
-            className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-              mode === 'login' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-            }`}
-          >
-            Já tenho conta
-          </button>
+    <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 380, padding: '0 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 36 }}>
+          <FFLogo size={38}/>
         </div>
 
-        <form onSubmit={mode === 'signup' ? handleSignup : handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
+        <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', padding: '32px 28px', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, left: 40, right: 40, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+          <div className="display" style={{ fontSize: 28, marginBottom: 4 }}>Bem-vindo</div>
+          {athlete && (
+            <p style={{ fontSize: 13, color: 'var(--fg-2)', marginBottom: 24, lineHeight: 1.5 }}>
+              Olá, <strong style={{ color: 'var(--fg-1)' }}>{athlete.name}</strong>! Configure seu acesso abaixo.
+            </p>
           )}
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
-          >
-            {submitting
-              ? 'Aguarde...'
-              : mode === 'signup' ? 'Ativar acesso' : 'Entrar'}
-          </button>
-        </form>
+          {/* Mode toggle */}
+          <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--ink-1)', borderRadius: 999, marginBottom: 24 }}>
+            {(['signup', 'login'] as const).map((m) => (
+              <button key={m} type="button" onClick={() => { setMode(m); setError(null) }}
+                style={{
+                  flex: 1, height: 32, borderRadius: 999, fontSize: 12, fontWeight: 500,
+                  background: mode === m ? 'var(--ink-3)' : 'transparent',
+                  color: mode === m ? 'var(--fg-1)' : 'var(--fg-3)',
+                  border: mode === m ? '1px solid var(--ink-4)' : '1px solid transparent',
+                  cursor: 'pointer',
+                }}>
+                {m === 'signup' ? 'Criar senha' : 'Já tenho conta'}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={mode === 'signup' ? handleSignup : handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Email</label>
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle}/>
+            </div>
+            <div>
+              <label style={labelStyle}>Senha</label>
+              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={inputStyle}/>
+            </div>
+
+            {error && (
+              <div style={{ padding: '10px 14px', background: 'color-mix(in oklch, var(--danger), black 70%)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--danger)' }}>
+                {error}
+              </div>
+            )}
+
+            <FFButton type="submit" variant="primary" size="lg" disabled={submitting} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
+              {submitting ? 'Aguarde...' : (mode === 'signup' ? 'Ativar acesso' : 'Entrar')}
+            </FFButton>
+          </form>
+        </div>
       </div>
     </div>
   )

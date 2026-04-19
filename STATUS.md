@@ -1,6 +1,6 @@
 # FitFlow — Status do Projeto
 
-**Última atualização:** 16/04/2026 (sessão 7)
+**Última atualização:** 19/04/2026 (sessão 9)
 **Produção:** https://fitflow-bay-nine.vercel.app
 
 ---
@@ -60,12 +60,21 @@
 - [x] Persistência de sessão via `onAuthStateChange`
 - [x] Redirecionamento por role após login
 
+### Design System (sessão 8–9)
+- [x] Redesign completo — tema editorial dark com paleta ink/fg/accent (amber oklch)
+- [x] `index.css` — CSS vars, classes `.eyebrow`, `.display`, `.num`, animações ff-rise/ff-pulse/ff-spin
+- [x] `tailwind.config.ts` — tokens ink/fg/accent/paper/radii via CSS vars
+- [x] `src/components/ui/index.tsx` — primitivos FF: FFLogo, FFWordmark, FFButton, FFTag, FFCard, FFMeter, FFDivider, FFAvatar, FFIcon
+- [x] Fontes: Instrument Serif (display), JetBrains Mono (mono/eyebrow/num), Geist (sans)
+- [x] Layout responsivo: sidebar 220px desktop + header/bottom-nav mobile (`useIsMobile`)
+
 ### Painel do Personal (`/trainer`) — `DashboardPage.tsx`
-- [x] Header com nome do trainer e botão de logout
-- [x] Aba Atletas: listar atletas, adicionar atleta, copiar link de convite
-- [x] Aba Treinos: gravar áudio (MediaRecorder), upload de arquivo de áudio ou **digitar/colar texto** (toggle Áudio/Texto)
+- [x] Header mobile com botão "Sair" + "Novo Treino"; sidebar desktop com nav + sign out
+- [x] 3 abas: Dashboard (stats + mini-lista alunos + CTA áudio), Alunos (busca + cards + convite), Treinos (lista expandível)
+- [x] Gravar áudio (MediaRecorder), upload de arquivo ou **digitar/colar texto** (toggle Áudio/Texto)
+- [x] Campo de nome do treino (ex: "Pernas A", "Costas B") ao criar
 - [x] Status do treino em tempo real (pending → transcribing → parsing → ready | error)
-- [x] Expandir treino para ver exercícios extraídos
+- [x] Expandir treino para ver exercícios; nome do treino exibido na lista
 
 ### Página de Convite (`/invite/:token`) — `InvitePage.tsx`
 - [x] Busca atleta pelo invite token (política pública de RLS)
@@ -74,18 +83,24 @@
 - [x] Vinculação automática de `auth_user_id` após autenticação
 
 ### Tela do Atleta (`/athlete`) — `WorkoutPage.tsx`
-- [x] Exibir treino mais recente com status `ready`
-- [x] Iniciar sessão (`startSession`)
-- [x] Check-in por série: reps feitas + peso opcional
-- [x] Registro de `set_logs` por série concluída
-- [x] Séries concluídas marcadas em verde
-- [x] Concluir sessão quando todas as séries forem feitas
-- [x] Timer de descanso entre séries — banner fixo no rodapé com countdown MM:SS, barra de progresso e botão "Pular" ✅ testado
-- [x] Embed de vídeo YouTube por exercício — iframe 16:9, só aparece se `youtube_video_id` preenchido ✅ testado
-- [x] Aba Histórico — sessões expandíveis com resumo por exercício (séries + peso máximo) ✅ testado
-- [x] Gráficos de evolução (Recharts) — peso máximo e média de reps por exercício ao longo das sessões ✅ testado
-- [x] Botão "Ver meu histórico" na tela de treino concluído — recarrega sessões e abre aba Histórico
-- [x] Sugestão de peso no campo de série — peso prescrito como valor inicial; último peso do histórico como placeholder
+- [x] **Múltiplos treinos ativos** — tela de seleção de fichas quando há mais de uma disponível; botão "Trocar ficha" no card
+- [x] Layout mobile-first com accordion: todos os exercícios visíveis, tap para expandir e registrar série inline
+- [x] Iniciar sessão (`startSession`); auto-expande próximo exercício após concluir todos os sets de um
+- [x] Check-in por série: reps feitas + peso opcional; dots de progresso por exercício
+- [x] Timer de descanso — banner flutuante acima da bottom nav com countdown MM:SS e botão "Pular"
+- [x] Embed de vídeo YouTube por exercício dentro do accordion expandido
+- [x] 2 abas: Treinos / Evolução (bottom nav com ícones)
+- [x] Evolução: Volume Total (line chart) + Frequência Semanal (bar chart) + Evolução de Carga por exercício (progress bars)
+- [x] Botão "Sair" no cabeçalho de todas as telas do atleta
+
+### Página de Convite (`/invite/:token`) — `InvitePage.tsx`
+- [x] Busca atleta pelo invite token (política pública de RLS)
+- [x] Cadastro com email/senha (sinaliza `role: 'athlete'` no metadata para não criar linha em trainers)
+- [x] Login para atletas que já têm conta
+- [x] Vinculação automática de `auth_user_id` após autenticação
+
+### Banco de dados — Migrations
+- [x] `20260419000001_add_workout_name.sql` — coluna `name text` na tabela `workouts` (suporte a múltiplas fichas por atleta)
 
 ### Tipos TypeScript
 - [x] `Athlete` atualizado com campo `auth_user_id: string | null`

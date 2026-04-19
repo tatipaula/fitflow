@@ -2,8 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --paper:       #F2EFE9;
+  --paper-2:     #E8E4DB;
+  --ink-0:       #070605;
+  --ink-1:       #0E0D0B;
+  --ink-2:       #17151F;
+  --ink-3:       #1F1D1A;
+  --ink-4:       #2A2823;
+  --fg-1:        #F2EFE9;
+  --fg-2:        #B8B2A3;
+  --fg-3:        #7A7567;
+  --fg-4:        #4A463C;
+  --accent:      oklch(0.83 0.19 85);
+  --accent-soft: oklch(0.83 0.19 85 / 0.15);
+  --accent-ink:  #0A0A08;
+  --success:     oklch(0.82 0.18 155);
+  --danger:      oklch(0.68 0.18 25);
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+}
+
 @layer base {
-  html {
-    font-family: Inter, system-ui, sans-serif;
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    overflow-x: hidden;
+    background: var(--ink-0);
+    color: var(--fg-1);
+    font-family: Geist, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  input, textarea, select, button { font-family: inherit; }
+}
+
+@layer utilities {
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    font-weight: 500;
+  }
+
+  .display {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 0.96;
+  }
+
+  .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .noscroll::-webkit-scrollbar { display: none; }
+  .noscroll { scrollbar-width: none; }
+
+  .hairline-accent {
+    position: absolute;
+    top: 0;
+    left: 40px;
+    right: 40px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.5;
   }
 }
+
+@keyframes ff-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ff-wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50%       { transform: scaleY(1); }
+}
+
+@keyframes ff-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@keyframes ff-spin { to { transform: rotate(360deg); } }
+
+.rise       { animation: ff-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.ff-pulse   { animation: ff-pulse 1.4s ease-in-out infinite; }
