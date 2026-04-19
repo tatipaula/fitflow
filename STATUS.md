@@ -132,14 +132,18 @@
 ### Deploy
 - [x] Repositório GitHub: https://github.com/tatipaula/fitflow
 - [x] Deploy no Vercel: https://fitflow-bay-nine.vercel.app
+- [x] Último deploy: 19/04/2026 — redesign mobile-first, múltiplas fichas, editar/excluir treino, email de notificação
 
 
 ### Relatórios e evolução
 - [x] Histórico de sessões do atleta ✅ testado
 - [x] Gráficos de evolução por exercício com Recharts ✅ testado
 
-### Pagamentos
-- [ ] Integração Stripe para plano `pro` do trainer
+### Pendente para próximas sessões
+- [ ] Editar exercícios de um treino já criado (séries, reps, peso)
+- [ ] Trocar remetente do email para domínio próprio (hoje: `onboarding@resend.dev`)
+- [ ] Melhorar tela do atleta sem treino ativo (mensagem mais útil ou mostrar histórico)
+- [ ] Monetização — decidir canal (web vs app store) antes de implementar pagamentos
 
 ---
 
