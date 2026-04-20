@@ -148,7 +148,9 @@ export default function DashboardPage() {
     const workout = await createWorkout({ athlete_id: selectedAthleteId, name: workoutName.trim() || undefined })
     if (!workout) { setProcessingError('Não foi possível criar o treino.'); setProcessing(false); return }
     setProcessingWorkout(workout); setWorkouts((p) => [workout, ...p]); setView('processing')
-    const result = inputMode === 'text' ? await processWorkoutText(workout.id, workoutText) : await processWorkoutAudio(workout.id, audioFile!)
+    const result = inputMode === 'text'
+      ? await processWorkoutText(workout.id, workoutText, selectedAthleteId)
+      : await processWorkoutAudio(workout.id, audioFile!, selectedAthleteId)
     if (!result) { setProcessingError('Falha ao processar. Verifique as chaves de API.'); setProcessing(false); return }
     if (trainer) { const updated = await getWorkouts(trainer.id); setWorkouts(updated); setDetectedExercises(await getExercises(workout.id)) }
     supabase.functions.invoke('notify-athlete', { body: { workout_id: workout.id } })

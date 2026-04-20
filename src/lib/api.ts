@@ -137,6 +137,7 @@ export async function deleteWorkout(id: string): Promise<boolean> {
 export async function processWorkoutText(
   workoutId: string,
   text: string,
+  athleteId?: string,
 ): Promise<Exercise[] | null> {
   await supabase.from('workouts').update({ status: 'parsing', transcript: text }).eq('id', workoutId)
 
@@ -146,18 +147,20 @@ export async function processWorkoutText(
     return null
   }
 
-  const videoIds = await Promise.all(
-    parseResult.exercises.map(async (ex) => {
+  const [videoIds, historyWeights] = await Promise.all([
+    Promise.all(parseResult.exercises.map(async (ex) => {
       const videos = await searchExerciseVideo(ex.name)
       return videos[0]?.id ?? null
-    })
-  )
+    })),
+    athleteId ? getLastWeightsByAthlete(athleteId) : Promise.resolve({} as Record<string, number>),
+  ])
 
   const exercises = parseResult.exercises.map((ex, i) => ({
     ...ex,
     workout_id: workoutId,
     order_index: i,
     youtube_video_id: videoIds[i] ?? null,
+    weight_kg: ex.weight_kg ?? historyWeights[ex.name.toLowerCase().trim()] ?? null,
   }))
 
   const { error: insertError } = await supabase.from('exercises').insert(exercises)
@@ -181,6 +184,7 @@ export async function processWorkoutText(
 export async function processWorkoutAudio(
   workoutId: string,
   audioFile: File,
+  athleteId?: string,
 ): Promise<Exercise[] | null> {
   // 1. Transcrever
   await supabase.from('workouts').update({ status: 'transcribing' }).eq('id', workoutId)
@@ -202,20 +206,22 @@ export async function processWorkoutAudio(
     return null
   }
 
-  // 3. Buscar vídeos do YouTube para cada exercício (best-effort — não bloqueia o fluxo)
-  const videoIds = await Promise.all(
-    parseResult.exercises.map(async (ex) => {
+  // 3. Vídeos + histórico de cargas em paralelo
+  const [videoIds, historyWeights] = await Promise.all([
+    Promise.all(parseResult.exercises.map(async (ex) => {
       const videos = await searchExerciseVideo(ex.name)
       return videos[0]?.id ?? null
-    })
-  )
+    })),
+    athleteId ? getLastWeightsByAthlete(athleteId) : Promise.resolve({} as Record<string, number>),
+  ])
 
-  // 4. Salvar exercícios e marcar como pronto
+  // 4. Salvar exercícios — weight_kg: IA > histórico > null
   const exercises = parseResult.exercises.map((ex, i) => ({
     ...ex,
     workout_id: workoutId,
     order_index: i,
     youtube_video_id: videoIds[i] ?? null,
+    weight_kg: ex.weight_kg ?? historyWeights[ex.name.toLowerCase().trim()] ?? null,
   }))
 
   const { error: insertError } = await supabase.from('exercises').insert(exercises)
@@ -245,6 +251,42 @@ export interface UpdateExerciseInput {
 export async function updateExercise(id: string, input: UpdateExerciseInput): Promise<boolean> {
   const { error } = await supabase.from('exercises').update(input).eq('id', id)
   return !error
+}
+
+/**
+ * Retorna a última carga usada por exercício para um atleta.
+ * Chave: nome do exercício normalizado (lowercase trim).
+ * Percorre set_logs do mais recente para o mais antigo e pega a primeira
+ * ocorrência de cada nome — garantindo que é a carga mais recente.
+ */
+export async function getLastWeightsByAthlete(athleteId: string): Promise<Record<string, number>> {
+  const { data: sessions, error: sessErr } = await supabase
+    .from('sessions')
+    .select('id')
+    .eq('athlete_id', athleteId)
+
+  if (sessErr || !sessions || sessions.length === 0) return {}
+
+  const sessionIds = sessions.map((s: { id: string }) => s.id)
+
+  const { data: logs, error: logsErr } = await supabase
+    .from('set_logs')
+    .select('weight_kg, completed_at, exercises(name)')
+    .in('session_id', sessionIds)
+    .eq('deleted', false)
+    .not('weight_kg', 'is', null)
+    .order('completed_at', { ascending: false })
+
+  if (logsErr || !logs) return {}
+
+  const map: Record<string, number> = {}
+  for (const row of logs as unknown as { weight_kg: number; exercises: { name: string } }[]) {
+    const key = row.exercises?.name?.toLowerCase().trim()
+    if (key && !(key in map)) {
+      map[key] = row.weight_kg
+    }
+  }
+  return map
 }
 
 export async function getExercises(workoutId: string): Promise<Exercise[]> {
