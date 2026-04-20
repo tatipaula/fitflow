@@ -1,6 +1,6 @@
 # FitFlow — Status do Projeto
 
-**Última atualização:** 19/04/2026 (sessão 10)
+**Última atualização:** 20/04/2026 (sessão 11)
 **Produção:** https://fitflow-bay-nine.vercel.app
 
 ---
@@ -132,19 +132,22 @@
 ### Deploy
 - [x] Repositório GitHub: https://github.com/tatipaula/fitflow
 - [x] Deploy no Vercel: https://fitflow-bay-nine.vercel.app
-- [x] Último deploy: 19/04/2026 — redesign mobile-first, múltiplas fichas, editar/excluir treino, email de notificação
+- [x] Último deploy: 20/04/2026 — editar exercícios, vídeo no personal, tela vazia atleta, carga do histórico
 
 
 ### Relatórios e evolução
 - [x] Histórico de sessões do atleta ✅ testado
 - [x] Gráficos de evolução por exercício com Recharts ✅ testado
 
+### Sessão 11 (20/04/2026)
+- [x] Editar exercícios de um treino já criado (séries, reps, peso, descanso, notas) — botão inline no card expandido
+- [x] Vídeo YouTube exibido também no painel do personal — botão "Vídeo" por exercício no card expandido
+- [x] Tela do atleta sem treino ativo — card explicativo com notificação por email + histórico de sessões recentes
+- [x] Preenchimento automático de carga pelo histórico — `getLastWeightsByAthlete` busca última carga por exercício nos `set_logs`; prioridade: áudio > histórico > null; query em dois passos (sessions → set_logs) para garantir filtro correto
+
 ### Pendente para próximas sessões
-- [x] Editar exercícios de um treino já criado (séries, reps, peso, descanso, notas) — inline no card expandido
-- [x] Vídeo YouTube exibido também no painel do personal — botão "Vídeo" por exercício
-- [x] Melhorar tela do atleta sem treino ativo — card explicativo + histórico de sessões recentes
-- [ ] Trocar remetente do email para domínio próprio (hoje: `onboarding@resend.dev`)
-- [ ] Monetização — decidir canal (web vs app store) antes de implementar pagamentos
+- [ ] Trocar remetente do email para domínio próprio (hoje: `onboarding@resend.dev`) — requer domínio + DNS no Resend
+- [ ] Monetização — decidir canal (web vs app store) antes de implementar Stripe
 
 ---
 
