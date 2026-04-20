@@ -6,8 +6,9 @@ import { FFWordmark, FFMeter, FFAvatar, FFIcon } from '@/components/ui'
 import {
   getAthletes, getWorkouts, createAthlete, createWorkout,
   processWorkoutAudio, processWorkoutText, getExercises,
-  updateWorkoutName, deleteWorkout,
+  updateWorkoutName, deleteWorkout, updateExercise,
 } from '@/lib/api'
+import { getYouTubeEmbedUrl } from '@/lib/youtube'
 import type { Athlete, Workout, Exercise } from '@/types'
 
 type TrainerView = 'home' | 'athletes' | 'workouts' | 'recording' | 'processing'
@@ -84,6 +85,11 @@ export default function DashboardPage() {
   const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [deletingWorkoutId, setDeletingWorkoutId] = useState<string | null>(null)
+
+  type ExerciseEditState = { sets: string; reps: string; weight_kg: string; rest_seconds: string; notes: string }
+  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null)
+  const [exerciseEdit, setExerciseEdit] = useState<ExerciseEditState>({ sets: '', reps: '', weight_kg: '', rest_seconds: '', notes: '' })
+  const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!trainer) { setLoadingData(false); return }
@@ -173,6 +179,43 @@ export default function DashboardPage() {
       if (expandedWorkoutId === id) setExpandedWorkoutId(null)
     }
     setDeletingWorkoutId(null)
+  }
+
+  function startEditExercise(ex: Exercise) {
+    setEditingExerciseId(ex.id)
+    setExerciseEdit({
+      sets: String(ex.sets),
+      reps: String(ex.reps),
+      weight_kg: ex.weight_kg != null ? String(ex.weight_kg) : '',
+      rest_seconds: String(ex.rest_seconds),
+      notes: ex.notes ?? '',
+    })
+  }
+
+  async function handleSaveExercise(workoutId: string, exId: string) {
+    const ok = await updateExercise(exId, {
+      sets: parseInt(exerciseEdit.sets) || 1,
+      reps: parseInt(exerciseEdit.reps) || 1,
+      weight_kg: exerciseEdit.weight_kg ? parseFloat(exerciseEdit.weight_kg) : null,
+      rest_seconds: parseInt(exerciseEdit.rest_seconds) || 60,
+      notes: exerciseEdit.notes.trim() || null,
+    })
+    if (ok) {
+      setExercises((prev) => ({
+        ...prev,
+        [workoutId]: (prev[workoutId] ?? []).map((e) =>
+          e.id === exId ? {
+            ...e,
+            sets: parseInt(exerciseEdit.sets) || 1,
+            reps: parseInt(exerciseEdit.reps) || 1,
+            weight_kg: exerciseEdit.weight_kg ? parseFloat(exerciseEdit.weight_kg) : null,
+            rest_seconds: parseInt(exerciseEdit.rest_seconds) || 60,
+            notes: exerciseEdit.notes.trim() || null,
+          } : e
+        ),
+      }))
+    }
+    setEditingExerciseId(null)
   }
 
   function copyInviteLink(a: Athlete) { navigator.clipboard.writeText(`${window.location.origin}/invite/${a.invite_token}`) }
@@ -481,16 +524,79 @@ export default function DashboardPage() {
                         ? <LoadingSpinner size="sm" message="Carregando..."/>
                         : (exercises[w.id] ?? []).length === 0
                           ? <div style={{ fontSize: 12, color: 'var(--fg-4)' }}>Nenhum exercício.</div>
-                          : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                               {(exercises[w.id] ?? []).map((ex, i) => (
-                                <div key={ex.id} style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                    <span className="num" style={{ fontSize: 10, color: 'var(--accent)' }}>{i + 1}</span>
+                                <div key={ex.id} style={{ background: 'var(--ink-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--ink-4)', overflow: 'hidden' }}>
+                                  {/* Exercise header row */}
+                                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 12px' }}>
+                                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                      <span className="num" style={{ fontSize: 9, color: 'var(--accent)' }}>{i + 1}</span>
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: 13, fontWeight: 500 }}>{ex.name}</div>
+                                      <div className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginTop: 1 }}>
+                                        {ex.sets}×{ex.reps}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''} · desc {ex.rest_seconds}s
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                      {ex.youtube_video_id && (
+                                        <button onClick={() => setExpandedVideoId(expandedVideoId === ex.id ? null : ex.id)}
+                                          title="Ver vídeo"
+                                          style={{ height: 28, padding: '0 10px', borderRadius: 999, background: expandedVideoId === ex.id ? 'var(--accent-soft)' : 'transparent', border: `1px solid ${expandedVideoId === ex.id ? 'var(--accent)' : 'var(--ink-4)'}`, color: expandedVideoId === ex.id ? 'var(--accent)' : 'var(--fg-3)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                          Vídeo
+                                        </button>
+                                      )}
+                                      <button onClick={() => editingExerciseId === ex.id ? setEditingExerciseId(null) : startEditExercise(ex)}
+                                        style={{ height: 28, padding: '0 10px', borderRadius: 999, background: editingExerciseId === ex.id ? 'var(--accent-soft)' : 'transparent', border: `1px solid ${editingExerciseId === ex.id ? 'var(--accent)' : 'var(--ink-4)'}`, color: editingExerciseId === ex.id ? 'var(--accent)' : 'var(--fg-3)', fontSize: 11, cursor: 'pointer' }}>
+                                        {editingExerciseId === ex.id ? 'Cancelar' : 'Editar'}
+                                      </button>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <div style={{ fontSize: 13 }}>{ex.name}</div>
-                                    <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{ex.sets} séries · Descanso {ex.rest_seconds}s</div>
-                                  </div>
+
+                                  {/* YouTube embed */}
+                                  {expandedVideoId === ex.id && ex.youtube_video_id && (
+                                    <div style={{ padding: '0 12px 12px' }}>
+                                      <div style={{ aspectRatio: '16/9', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+                                        <iframe src={getYouTubeEmbedUrl(ex.youtube_video_id)} title={ex.name}
+                                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                          allowFullScreen style={{ width: '100%', height: '100%', border: 'none' }}/>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Inline edit form */}
+                                  {editingExerciseId === ex.id && (
+                                    <div style={{ padding: '0 12px 12px', borderTop: '1px solid var(--ink-4)' }}>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 10 }}>
+                                        {[
+                                          { label: 'Séries', key: 'sets' as const, type: 'number' },
+                                          { label: 'Reps', key: 'reps' as const, type: 'number' },
+                                          { label: 'Kg', key: 'weight_kg' as const, type: 'number' },
+                                          { label: 'Desc (s)', key: 'rest_seconds' as const, type: 'number' },
+                                        ].map(({ label, key, type }) => (
+                                          <div key={key}>
+                                            <div style={{ fontSize: 9, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
+                                            <input type={type} min="0" step={key === 'weight_kg' ? '0.5' : '1'}
+                                              value={exerciseEdit[key]}
+                                              onChange={(e) => setExerciseEdit((p) => ({ ...p, [key]: e.target.value }))}
+                                              style={{ width: '100%', height: 36, padding: '0 8px', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--fg-1)', outline: 'none', textAlign: 'center' }}/>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div style={{ marginTop: 8 }}>
+                                        <div style={{ fontSize: 9, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Notas</div>
+                                        <input type="text" value={exerciseEdit.notes}
+                                          onChange={(e) => setExerciseEdit((p) => ({ ...p, notes: e.target.value }))}
+                                          placeholder="Observações opcionais..."
+                                          style={{ width: '100%', height: 34, padding: '0 10px', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--fg-1)', outline: 'none' }}/>
+                                      </div>
+                                      <button onClick={() => handleSaveExercise(w.id, ex.id)}
+                                        style={{ marginTop: 8, width: '100%', height: 34, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                                        Salvar alterações
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>

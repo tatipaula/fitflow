@@ -370,9 +370,47 @@ export default function WorkoutPage() {
 
       {!workout ? (
         availableWorkouts.length === 0 ? (
-          <div style={{ padding: '80px 24px', textAlign: 'center' }}>
-            <div className="display" style={{ fontSize: 28, marginBottom: 12 }}>Nenhum treino disponível.</div>
-            <p style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.6 }}>Aguarde seu personal trainer criar um treino para você.</p>
+          <div style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', padding: '36px 24px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 20, right: 20, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                {FFIcon.dumbbell(24, 'var(--fg-3)')}
+              </div>
+              <div className="display" style={{ fontSize: 26, marginBottom: 8 }}>Nenhum treino ainda</div>
+              <p style={{ fontSize: 14, color: 'var(--fg-3)', lineHeight: 1.7, maxWidth: 260, margin: '0 auto' }}>
+                Seu personal trainer ainda não criou uma ficha para você. Você será notificado por email assim que estiver pronta.
+              </p>
+            </div>
+
+            {sessions.length > 0 && (
+              <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', padding: '20px' }}>
+                <div className="eyebrow" style={{ marginBottom: 14 }}>Últimas sessões</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {sessions.slice(0, 3).map((s) => {
+                    const vol = s.set_logs.filter((l) => !l.deleted).reduce((sum, l) => sum + l.reps_done * (l.weight_kg ?? 1), 0)
+                    return (
+                      <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--ink-3)', borderRadius: 'var(--r-md)' }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>
+                            {new Date(s.started_at).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'short' })}
+                          </div>
+                          <div className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginTop: 2 }}>
+                            {s.set_logs.filter((l) => !l.deleted).length} séries registradas
+                          </div>
+                        </div>
+                        <div className="num" style={{ fontSize: 13, color: 'var(--accent)' }}>
+                          {Math.round(vol).toLocaleString('pt-BR')} kg·rep
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <button onClick={() => setTab('evolucao')}
+                  style={{ marginTop: 12, width: '100%', height: 36, borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer' }}>
+                  Ver evolução completa
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>

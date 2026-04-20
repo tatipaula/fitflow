@@ -140,9 +140,10 @@
 - [x] Gráficos de evolução por exercício com Recharts ✅ testado
 
 ### Pendente para próximas sessões
-- [ ] Editar exercícios de um treino já criado (séries, reps, peso)
+- [x] Editar exercícios de um treino já criado (séries, reps, peso, descanso, notas) — inline no card expandido
+- [x] Vídeo YouTube exibido também no painel do personal — botão "Vídeo" por exercício
+- [x] Melhorar tela do atleta sem treino ativo — card explicativo + histórico de sessões recentes
 - [ ] Trocar remetente do email para domínio próprio (hoje: `onboarding@resend.dev`)
-- [ ] Melhorar tela do atleta sem treino ativo (mensagem mais útil ou mostrar histórico)
 - [ ] Monetização — decidir canal (web vs app store) antes de implementar pagamentos
 
 ---

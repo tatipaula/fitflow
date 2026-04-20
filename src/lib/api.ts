@@ -234,6 +234,19 @@ export async function processWorkoutAudio(
 
 // ─── Exercises ────────────────────────────────────────────────────────────────
 
+export interface UpdateExerciseInput {
+  sets?: number
+  reps?: number
+  weight_kg?: number | null
+  rest_seconds?: number
+  notes?: string | null
+}
+
+export async function updateExercise(id: string, input: UpdateExerciseInput): Promise<boolean> {
+  const { error } = await supabase.from('exercises').update(input).eq('id', id)
+  return !error
+}
+
 export async function getExercises(workoutId: string): Promise<Exercise[]> {
   const { data, error } = await supabase
     .from('exercises')
