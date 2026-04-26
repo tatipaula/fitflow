@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
               </div>
             </div>
             <a href="https://kinevia.com.br/athlete"
-              style="display:inline-block;background:#d4a017;color:#0A0A08;font-weight:700;font-size:14px;padding:12px 28px;border-radius:999px;text-decoration:none;">
+              style="display:inline-block;background:#C8A96E;color:#0A0909;font-weight:700;font-size:14px;padding:12px 28px;border-radius:999px;text-decoration:none;">
               Ver meu treino
             </a>
             <p style="margin-top:32px;font-size:12px;color:#4A463C;">Kinevia · Você recebeu este email porque tem um treino ativo.</p>

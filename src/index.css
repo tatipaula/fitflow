@@ -5,18 +5,18 @@
 :root {
   --paper:       #F2EFE9;
   --paper-2:     #E8E4DB;
-  --ink-0:       #070605;
-  --ink-1:       #0E0D0B;
-  --ink-2:       #17151F;
-  --ink-3:       #1F1D1A;
-  --ink-4:       #2A2823;
+  --ink-0:       #0A0909;
+  --ink-1:       #141210;
+  --ink-2:       #1C1A17;
+  --ink-3:       #252118;
+  --ink-4:       #2A2723;
   --fg-1:        #F2EFE9;
   --fg-2:        #B8B2A3;
   --fg-3:        #7A7567;
   --fg-4:        #4A463C;
-  --accent:      oklch(0.83 0.19 85);
-  --accent-soft: oklch(0.83 0.19 85 / 0.15);
-  --accent-ink:  #0A0A08;
+  --accent:      oklch(0.78 0.10 75);
+  --accent-soft: oklch(0.78 0.10 75 / 0.14);
+  --accent-ink:  #0A0909;
   --success:     oklch(0.82 0.18 155);
   --danger:      oklch(0.68 0.18 25);
   --r-sm: 6px;
@@ -33,7 +33,7 @@
     overflow-x: hidden;
     background: var(--ink-0);
     color: var(--fg-1);
-    font-family: Geist, system-ui, sans-serif;
+    font-family: 'DM Sans', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -52,8 +52,8 @@
   }
 
   .display {
-    font-family: 'Instrument Serif', serif;
-    font-weight: 400;
+    font-family: 'Cormorant', Georgia, serif;
+    font-weight: 300;
     letter-spacing: -0.01em;
     line-height: 0.96;
   }

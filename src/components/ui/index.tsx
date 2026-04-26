@@ -5,12 +5,11 @@ import type { CSSProperties, ReactNode } from 'react'
 export function KVLogo({ size = 28, color = 'var(--fg-1)' }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-      <circle cx="20" cy="20" r="19" stroke={color} strokeWidth="1"/>
-      <path d="M13 28 V14 C13 11.8 14.8 10 17 10 H20"
-            stroke={color} strokeWidth="1.4" fill="none" strokeLinecap="round"/>
-      <path d="M23 28 V14 C23 11.8 24.8 10 27 10"
-            stroke={color} strokeWidth="1.4" fill="none" strokeLinecap="round"/>
-      <line x1="10" y1="19" x2="30" y2="19" stroke={color} strokeWidth="1.4"/>
+      <circle cx="20" cy="20" r="18.5" stroke={color} strokeWidth="1"/>
+      <path d="M13 12 L13 28" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M13 20 L20 12" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M13 20 L20 28" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M22 16 L25 24 L28 16" stroke={color} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
 }
@@ -20,7 +19,7 @@ export function KVWordmark({ size = 18, color = 'var(--fg-1)' }: { size?: number
     <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8,
       fontFamily: 'var(--f-display)', fontSize: size * 1.4, color, letterSpacing: -0.01 }}>
       <KVLogo size={size * 1.3} color={color}/>
-      <span style={{ fontStyle: 'italic', fontWeight: 400, fontFamily: "'Instrument Serif', serif" }}>Kinevia</span>
+      <span style={{ fontStyle: 'italic', fontWeight: 300, fontFamily: "'Cormorant', Georgia, serif", letterSpacing: '0.06em' }}>Kinevia</span>
     </div>
   )
 }

@@ -1,12 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Background rounded square -->
-  <rect width="512" height="512" rx="88" fill="#0E0D0B"/>
-  <!-- K — stem -->
-  <rect x="90" y="100" width="52" height="312" rx="10" fill="#C9B830"/>
-  <!-- K — upper arm (rotates up-right from vertex at stem center) -->
-  <rect x="142" y="230" width="295" height="52" rx="10"
-        transform="rotate(-28 142 256)" fill="#C9B830"/>
-  <!-- K — lower arm (mirrors upper) -->
-  <rect x="142" y="230" width="295" height="52" rx="10"
-        transform="rotate(28 142 256)" fill="#C9B830"/>
+  <!-- Background -->
+  <rect width="512" height="512" rx="88" fill="#0A0909"/>
+  <!-- Outer ring -->
+  <circle cx="256" cy="256" r="180" stroke="#C8B99A" stroke-width="8" fill="none"/>
+  <!-- K stem -->
+  <path d="M176 152 L176 360" stroke="#C8B99A" stroke-width="16" stroke-linecap="round"/>
+  <!-- K upper arm -->
+  <path d="M176 256 L248 152" stroke="#C8B99A" stroke-width="16" stroke-linecap="round"/>
+  <!-- K lower arm -->
+  <path d="M176 256 L248 360" stroke="#C8B99A" stroke-width="16" stroke-linecap="round"/>
+  <!-- v -->
+  <path d="M274 196 L308 308 L342 196" stroke="#C8B99A" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 </svg>

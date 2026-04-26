@@ -34,8 +34,8 @@ export default {
         danger: 'var(--danger)',
       },
       fontFamily: {
-        display: ['"Instrument Serif"', 'serif'],
-        sans: ['Geist', 'system-ui', 'sans-serif'],
+        display: ['"Cormorant"', 'Georgia', 'serif'],
+        sans: ['"DM Sans"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],
       },
       borderRadius: {

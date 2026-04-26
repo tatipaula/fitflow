@@ -34,10 +34,10 @@ Deno.serve(async (req) => {
             </p>
             <div style="background:#1F1D1A;border:1px solid #2A2823;border-radius:10px;padding:20px 24px;margin-bottom:28px;">
               <div style="font-size:13px;color:#7A7567;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;font-family:monospace;">Seu link de acesso</div>
-              <div style="font-size:13px;color:#d4a017;word-break:break-all;">${invite_link}</div>
+              <div style="font-size:13px;color:#C8A96E;word-break:break-all;">${invite_link}</div>
             </div>
             <a href="${invite_link}"
-              style="display:inline-block;background:#d4a017;color:#0A0A08;font-weight:700;font-size:14px;padding:12px 28px;border-radius:999px;text-decoration:none;">
+              style="display:inline-block;background:#C8A96E;color:#0A0909;font-weight:700;font-size:14px;padding:12px 28px;border-radius:999px;text-decoration:none;">
               Ativar meu acesso
             </a>
             <p style="margin-top:32px;font-size:12px;color:#4A463C;">Este link expira em 7 dias. Kinevia · App de acompanhamento de treinos.</p>
