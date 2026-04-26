@@ -6,9 +6,13 @@
 
 import type {
   Athlete,
+  CreateAthleteInput,
   CreateWorkoutInput,
   Exercise,
+  Invite,
+  InviteWithAthlete,
   LogSetInput,
+  ParqResponse,
   Session,
   SessionWithLogs,
   SetLog,
@@ -46,10 +50,122 @@ export async function createAthlete(name: string, email: string): Promise<Athlet
   const { data, error } = await supabase
     .from('athletes')
     .insert({ trainer_id: session.user.id, name, email })
-    .select('id, trainer_id, name, email, invite_token, created_at')
+    .select('*')
     .single()
   if (error) { console.error('[createAthlete]', error); return null }
   return data as Athlete
+}
+
+export async function createAthleteWithInvite(
+  input: CreateAthleteInput,
+): Promise<{ athlete: Athlete; invite: Invite } | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+
+  const { data: athleteData, error: athleteErr } = await supabase
+    .from('athletes')
+    .insert({
+      trainer_id: session.user.id,
+      name: input.name,
+      email: input.email ?? null,
+      phone: input.phone ?? null,
+      weight_kg: input.weight_kg ?? null,
+    })
+    .select('*')
+    .single()
+  if (athleteErr || !athleteData) { console.error('[createAthleteWithInvite]', athleteErr); return null }
+
+  const { data: inviteData, error: inviteErr } = await supabase
+    .from('invites')
+    .insert({ trainer_id: session.user.id, athlete_id: athleteData.id })
+    .select('*')
+    .single()
+  if (inviteErr || !inviteData) { console.error('[createAthleteWithInvite invite]', inviteErr); return null }
+
+  return { athlete: athleteData as Athlete, invite: inviteData as Invite }
+}
+
+export async function getInviteByToken(token: string): Promise<InviteWithAthlete | null> {
+  const { data, error } = await supabase
+    .from('invites')
+    .select('*, athletes(id, name, email, phone)')
+    .eq('token', token)
+    .maybeSingle()
+  if (error) return null
+  return data as unknown as InviteWithAthlete
+}
+
+export async function linkAthleteByInviteToken(token: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('link_athlete_by_invite_token', { p_invite_token: token })
+  if (error) return false
+  return data as boolean
+}
+
+export async function saveParqResponse(athleteId: string, answers: boolean[]): Promise<boolean> {
+  const [q1, q2, q3, q4, q5, q6, q7] = answers
+  const { error } = await supabase
+    .from('parq_responses')
+    .insert({ athlete_id: athleteId, q1, q2, q3, q4, q5, q6, q7 })
+  return !error
+}
+
+export async function getParqResponse(athleteId: string): Promise<ParqResponse | null> {
+  const { data, error } = await supabase
+    .from('parq_responses')
+    .select('*')
+    .eq('athlete_id', athleteId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) return null
+  return data as ParqResponse | null
+}
+
+export async function assignWorkoutToAthletes(
+  sourceWorkoutId: string,
+  athleteIds: string[],
+): Promise<number> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user || athleteIds.length === 0) return 0
+
+  const [sourceExercises, workoutRes] = await Promise.all([
+    getExercises(sourceWorkoutId),
+    supabase.from('workouts').select('name').eq('id', sourceWorkoutId).single(),
+  ])
+  const workoutName = workoutRes.data?.name ?? null
+
+  let count = 0
+  for (const athleteId of athleteIds) {
+    const { data: newWorkout, error } = await supabase
+      .from('workouts')
+      .insert({
+        trainer_id: session.user.id,
+        athlete_id: athleteId,
+        name: workoutName,
+        status: 'ready',
+      })
+      .select()
+      .single()
+    if (error || !newWorkout) continue
+
+    if (sourceExercises.length > 0) {
+      await supabase.from('exercises').insert(
+        sourceExercises.map((ex, i) => ({
+          workout_id: newWorkout.id,
+          name: ex.name,
+          sets: ex.sets,
+          reps: ex.reps,
+          weight_kg: ex.weight_kg,
+          rest_seconds: ex.rest_seconds,
+          notes: ex.notes,
+          youtube_video_id: ex.youtube_video_id,
+          order_index: i,
+        })),
+      )
+    }
+    count++
+  }
+  return count
 }
 
 export async function getAthleteById(id: string): Promise<Athlete | null> {

@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'FitFlow <onboarding@resend.dev>',
+        from: 'Kinevia <onboarding@resend.dev>',
         to: athlete.email,
         subject: `Novo treino disponível: ${workoutName}`,
         html: `
@@ -67,11 +67,11 @@ Deno.serve(async (req) => {
                 ${new Date(workout.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
               </div>
             </div>
-            <a href="https://fitflow-bay-nine.vercel.app/athlete"
+            <a href="https://kinevia.com.br/athlete"
               style="display:inline-block;background:#d4a017;color:#0A0A08;font-weight:700;font-size:14px;padding:12px 28px;border-radius:999px;text-decoration:none;">
               Ver meu treino
             </a>
-            <p style="margin-top:32px;font-size:12px;color:#4A463C;">FitFlow · Você recebeu este email porque tem um treino ativo.</p>
+            <p style="margin-top:32px;font-size:12px;color:#4A463C;">Kinevia · Você recebeu este email porque tem um treino ativo.</p>
           </div>
         `,
       }),

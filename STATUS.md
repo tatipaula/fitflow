@@ -1,7 +1,7 @@
-# FitFlow — Status do Projeto
+# Kinevia — Status do Projeto
 
-**Última atualização:** 20/04/2026 (sessão 11)
-**Produção:** https://fitflow-bay-nine.vercel.app
+**Última atualização:** 26/04/2026 (sessão 14)
+**Produção:** https://kinevia.com.br (DNS em propagação — fallback: https://fitflow-bay-nine.vercel.app)
 
 ---
 
@@ -42,8 +42,8 @@
 - [x] `supabase.ts` — cliente Supabase
 - [x] `whisper.ts` — upload para Storage + invoke Edge Function
 - [x] `claude.ts` — invoke Edge Function `parse-workout`
-- [x] `youtube.ts` — busca de vídeos via YouTube Data API v3
-- [x] `api.ts` — camada central com todas as operações CRUD + `createAthlete`, `getAthleteByAuthId`, `linkAthleteAccount`, `getAthleteWorkouts`
+- [x] `youtube.ts` — busca de vídeos via YouTube Data API v3 com filtro `videoDuration=short`
+- [x] `api.ts` — camada central com todas as operações CRUD + `createAthleteWithInvite`, `getInviteByToken`, `linkAthleteByInviteToken`, `saveParqResponse`, `getParqResponse`, `assignWorkoutToAthletes`
 
 ### Estado global (`src/stores/authStore.ts`)
 - [x] Zustand store com `role`, `trainer`, `athlete`, `loading`
@@ -51,9 +51,10 @@
 - [x] `clearAuth` com `loading: false`
 
 ### Roteamento (`src/App.tsx`)
-- [x] Rotas: `/login`, `/invite/:token`, `/trainer`, `/athlete`
+- [x] Rotas: `/login`, `/invite/:token`, `/convite/:token`, `/trainer`, `/athlete`
 - [x] `onAuthStateChange` com `setTimeout` para evitar deadlock de queries dentro do callback
-- [x] Token de convite pendente (`pending_invite_token` no localStorage) vinculado após confirmação de email
+- [x] Token de convite pendente (`pending_invite_token` e `pending_convite_token`) vinculado após confirmação de email
+- [x] PAR-Q pendente (`pending_parq_answers` + `pending_parq_athlete_id`) salvo após confirmação de email
 
 ### Autenticação
 - [x] `LoginPage.tsx` — login e cadastro com email/senha para trainers
@@ -62,9 +63,9 @@
 
 ### Design System (sessão 8–9)
 - [x] Redesign completo — tema editorial dark com paleta ink/fg/accent (amber oklch)
-- [x] `index.css` — CSS vars, classes `.eyebrow`, `.display`, `.num`, animações ff-rise/ff-pulse/ff-spin
+- [x] `index.css` — CSS vars, classes `.eyebrow`, `.display`, `.num`, animações kv-rise/kv-pulse/kv-spin
 - [x] `tailwind.config.ts` — tokens ink/fg/accent/paper/radii via CSS vars
-- [x] `src/components/ui/index.tsx` — primitivos FF: FFLogo, FFWordmark, FFButton, FFTag, FFCard, FFMeter, FFDivider, FFAvatar, FFIcon
+- [x] `src/components/ui/index.tsx` — primitivos KV: KVLogo, KVWordmark, KVButton, KVTag, KVCard, KVMeter, KVDivider, KVAvatar, KVIcon
 - [x] Fontes: Instrument Serif (display), JetBrains Mono (mono/eyebrow/num), Geist (sans)
 - [x] Layout responsivo: sidebar 220px desktop + header/bottom-nav mobile (`useIsMobile`)
 
@@ -77,9 +78,9 @@
 - [x] Expandir treino para ver exercícios; nome do treino exibido na lista
 - [x] **Renomear treino** — edição inline no card expandido (Enter salva, Esc cancela)
 - [x] **Excluir treino** — botão vermelho com confirmação antes de deletar
-- [x] **Notificação por email ao atleta** — Edge Function `notify-athlete` via Resend; disparada após processamento concluído; remetente provisório `onboarding@resend.dev` (trocar para domínio próprio futuramente)
+- [x] **Notificação por email ao atleta** — Edge Function `notify-athlete` via Resend; remetente provisório `onboarding@resend.dev` (trocar quando domínio Resend verificado)
 
-### Página de Convite (`/invite/:token`) — `InvitePage.tsx`
+### Página de Convite (`/convite/:token`) — `ConvitePage.tsx`
 - [x] Busca atleta pelo invite token (política pública de RLS)
 - [x] Cadastro com email/senha (sinaliza `role: 'athlete'` no metadata para não criar linha em trainers)
 - [x] Login para atletas que já têm conta
@@ -96,63 +97,72 @@
 - [x] Evolução: Volume Total (line chart) + Frequência Semanal (bar chart) + Evolução de Carga por exercício (progress bars)
 - [x] Botão "Sair" no cabeçalho de todas as telas do atleta
 
-### Página de Convite (`/invite/:token`) — `InvitePage.tsx`
-- [x] Busca atleta pelo invite token (política pública de RLS)
-- [x] Cadastro com email/senha (sinaliza `role: 'athlete'` no metadata para não criar linha em trainers)
-- [x] Login para atletas que já têm conta
-- [x] Vinculação automática de `auth_user_id` após autenticação
+### PWA (sessão 14 — 26/04/2026)
+- [x] `vite-plugin-pwa` configurado com manifest, service worker e workbox
+- [x] Ícones: 64×64, 192×192, 512×512, maskable 512×512, apple-touch-icon 180×180, favicon.ico
+- [x] Ícone: monograma "K" geométrico sobre fundo dark (#0E0D0B)
+- [x] Meta tags Apple: `apple-mobile-web-app-capable`, `status-bar-style`, `apple-touch-icon`
+- [x] `PWAInstallBanner` na LoginPage — Android: prompt nativo; iOS: instrução com ícone Share
+- [x] Estratégias de cache: Fonts CacheFirst 1 ano, YouTube CacheFirst 7 dias, Supabase NetworkFirst
+
+### Renomeação FitFlow → Kinevia (sessão 14 — 26/04/2026)
+- [x] Todos os textos visíveis ao usuário atualizados
+- [x] Componentes renomeados: FF* → KV* (KVLogo, KVButton, KVIcon…)
+- [x] CSS keyframes: ff-* → kv-*
+- [x] Edge functions `notify-athlete` e `send-invite` atualizadas e redeployadas
+- [x] Domínio `kinevia.com.br` + `www.kinevia.com.br` adicionados ao Vercel
+- [x] DNS aguardando propagação (A record: `76.76.21.21`)
 
 ### Banco de dados — Migrations
-- [x] `20260419000001_add_workout_name.sql` — coluna `name text` na tabela `workouts` (suporte a múltiplas fichas por atleta)
+- [x] `20260419000001_add_workout_name.sql` — coluna `name text` na tabela `workouts`
+- [x] `20260423000001_add_athlete_fields.sql` — `phone`, `weight_kg` em `athletes`; `email` nullable
+- [x] `20260423000002_create_invites.sql` — tabela `invites` com expiração
+- [x] `20260423000003_create_parq_responses.sql` — tabela `parq_responses`
 
-### Edge Functions
-- [x] `transcribe-audio` — transcrição via OpenAI Whisper
-- [x] `parse-workout` — estruturação via Claude Haiku
-- [x] `notify-athlete` — email ao atleta via Resend quando treino fica pronto
+### Sessão 11 (20/04/2026)
+- [x] Editar exercícios de um treino já criado (séries, reps, peso, descanso, notas)
+- [x] Vídeo YouTube no painel do personal — botão "Vídeo" por exercício no card expandido
+- [x] Tela do atleta sem treino ativo — card explicativo + histórico de sessões recentes
+- [x] Preenchimento automático de carga pelo histórico
 
-### Tipos TypeScript
-- [x] `Athlete` atualizado com campo `auth_user_id: string | null`
-- [x] `Exercise` atualizado com campo `weight_kg: number | null`
+### Sessão 12 (21/04/2026)
+- [x] Pipeline simplificado — spinner "Processando..." em vez de steps detalhados
+- [x] Tela de revisão do treino antes de confirmar e enviar ao atleta
+- [x] Fix botão parar gravação no iOS Safari
 
-### Componentes
-- [x] `LoadingSpinner.tsx`
+### Sessão 13 (23/04/2026)
+- [x] Detalhe do aluno no painel — treino atual + PAR-Q
+- [x] Cadastro de aluno com nome/email/phone/peso + convite WhatsApp ou email
+- [x] PAR-Q no onboarding via `/convite/:token`
+- [x] Atribuir treino para múltiplos alunos (cópias independentes)
+- [x] Edge function `send-invite` (email de convite via Resend)
 
 ---
 
 ## Bugs conhecidos
 
-- [x] ~~Créditos Anthropic insuficientes~~ — resolvido (propagação do pagamento)
-- [x] ~~Erro 406 no endpoint do trainer~~ — corrigido: `.single()` → `.maybeSingle()` ✅ testado em produção
-- [x] ~~Tela do atleta em branco~~ — corrigido: `useMemo` estava após early returns (violação de Rules of Hooks)
+- [x] ~~Créditos Anthropic insuficientes~~ — resolvido
+- [x] ~~Erro 406 no endpoint do trainer~~ — corrigido
+- [x] ~~Tela do atleta em branco~~ — corrigido (Rules of Hooks)
 
 ---
 
 ## Pendente
 
-### Deploy
-- [x] Repositório GitHub: https://github.com/tatipaula/fitflow
-- [x] Deploy no Vercel: https://fitflow-bay-nine.vercel.app
-- [x] Último deploy: 20/04/2026 — editar exercícios, vídeo no personal, tela vazia atleta, carga do histórico
+### Domínio e email
+- [ ] Verificar propagação DNS de `kinevia.com.br` (A record `76.76.21.21`) — aguardando ~3h
+- [ ] Configurar domínio no Resend e trocar remetente de `onboarding@resend.dev` para `no-reply@kinevia.com.br`
 
-
-### Relatórios e evolução
-- [x] Histórico de sessões do atleta ✅ testado
-- [x] Gráficos de evolução por exercício com Recharts ✅ testado
-
-### Sessão 11 (20/04/2026)
-- [x] Editar exercícios de um treino já criado (séries, reps, peso, descanso, notas) — botão inline no card expandido
-- [x] Vídeo YouTube exibido também no painel do personal — botão "Vídeo" por exercício no card expandido
-- [x] Tela do atleta sem treino ativo — card explicativo com notificação por email + histórico de sessões recentes
-- [x] Preenchimento automático de carga pelo histórico — `getLastWeightsByAthlete` busca última carga por exercício nos `set_logs`; prioridade: áudio > histórico > null; query em dois passos (sessions → set_logs) para garantir filtro correto
-
-### Pendente para próximas sessões
-- [ ] Trocar remetente do email para domínio próprio (hoje: `onboarding@resend.dev`) — requer domínio + DNS no Resend
-- [ ] Monetização — decidir canal (web vs app store) antes de implementar Stripe
+### Monetização
+- [ ] Decidir canal (web vs app store) antes de implementar Stripe
+- [ ] Implementar plano Pro para trainers
 
 ---
 
 ## Integrações externas
-- [x] YouTube Data API v3 — chave `VITE_YOUTUBE_API_KEY` configurada no `.env` e no Vercel; busca automática de vídeo após parsing ✅ testado em produção
+- [x] YouTube Data API v3 — `VITE_YOUTUBE_API_KEY`
+- [x] Resend — emails de convite e notificação de treino
+- [ ] Stripe — pendente decisão de canal
 
 ## Arquitetura — decisões registradas
 - Áudio nunca processado no frontend — sempre via Edge Function (chave OpenAI fica server-side)
@@ -163,3 +173,6 @@
 - `supabase.auth.getSession()` preferível a `getUser()` em funções de API (evita requisição de rede desnecessária)
 - `athletes.id` não é alterado após criação — vinculação com Auth via coluna separada `auth_user_id`
 - `initAuth` verifica atleta antes de trainer (trigger cria linha em trainers para todo signup, inclusive atletas)
+- Componentes auxiliares nunca definir dentro do corpo do componente pai — causa remount a cada render
+- Convite antigo (`/invite/:token`) mantido para backward compat; novo fluxo usa `/convite/:token` com tabela `invites` separada
+- Treinos atribuídos são cópias físicas por atleta (INSERT por aluno) — editar um não afeta os demais

@@ -21,10 +21,26 @@ export interface Athlete {
   id: string
   trainer_id: string
   name: string
-  email: string
+  email: string | null
+  phone: string | null
+  weight_kg: number | null
   invite_token: string
   created_at: string
   auth_user_id: string | null
+}
+
+export interface Invite {
+  id: string
+  trainer_id: string
+  athlete_id: string
+  token: string
+  expires_at: string
+  used_at: string | null
+  created_at: string
+}
+
+export interface InviteWithAthlete extends Invite {
+  athletes: Pick<Athlete, 'id' | 'name' | 'email' | 'phone'>
 }
 
 export interface Workout {
@@ -69,8 +85,16 @@ export interface SetLog {
   reps_done: number
   weight_kg: number | null
   completed_at: string
-  // soft-delete: nunca deletar set_logs, apenas marcar
   deleted: boolean
+}
+
+export interface ParqResponse {
+  id: string
+  athlete_id: string
+  q1: boolean; q2: boolean; q3: boolean; q4: boolean
+  q5: boolean; q6: boolean; q7: boolean
+  has_any_yes: boolean
+  created_at: string
 }
 
 // ─── Histórico ────────────────────────────────────────────────────────────────
@@ -84,6 +108,13 @@ export interface SessionWithLogs extends Session {
 }
 
 // ─── API / request shapes ─────────────────────────────────────────────────────
+
+export interface CreateAthleteInput {
+  name: string
+  email?: string
+  phone?: string
+  weight_kg?: number
+}
 
 export interface CreateWorkoutInput {
   athlete_id: string

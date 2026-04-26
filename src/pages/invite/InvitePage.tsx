@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { getAthleteByInviteToken, linkAthleteAccount } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { FFLogo, FFButton } from '@/components/ui'
+import { KVLogo, KVButton } from '@/components/ui'
 import type { Athlete } from '@/types'
 
 export default function InvitePage() {
@@ -32,7 +32,7 @@ export default function InvitePage() {
     if (!token) { setNotFound(true); setLoadingAthlete(false); return }
     getAthleteByInviteToken(token).then((a) => {
       if (!a) setNotFound(true)
-      else { setAthlete(a); setEmail(a.email) }
+      else { setAthlete(a); if (a.email) setEmail(a.email) }
       setLoadingAthlete(false)
     })
   }, [token])
@@ -108,7 +108,7 @@ export default function InvitePage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center', padding: '0 24px' }}>
-          <FFLogo size={32} color="var(--fg-3)"/>
+          <KVLogo size={32} color="var(--fg-3)"/>
           <p style={{ marginTop: 20, color: 'var(--fg-2)', fontWeight: 500 }}>Link de convite inválido ou expirado.</p>
           <p style={{ marginTop: 6, fontSize: 13, color: 'var(--fg-3)' }}>Peça um novo link ao seu personal trainer.</p>
         </div>
@@ -120,7 +120,7 @@ export default function InvitePage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: '100%', maxWidth: 360, padding: '0 24px', textAlign: 'center' }}>
-          <FFLogo size={36}/>
+          <KVLogo size={36}/>
           <div className="display" style={{ fontSize: 28, marginTop: 28, marginBottom: 12 }}>Verifique seu email</div>
           <p style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.6 }}>
             Enviamos um link de confirmação para <strong style={{ color: 'var(--fg-1)' }}>{email}</strong>. Após confirmar, seu acesso será ativado.
@@ -134,7 +134,7 @@ export default function InvitePage() {
     <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 380, padding: '0 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 36 }}>
-          <FFLogo size={38}/>
+          <KVLogo size={38}/>
         </div>
 
         <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', padding: '32px 28px', position: 'relative', overflow: 'hidden' }}>
@@ -179,9 +179,9 @@ export default function InvitePage() {
               </div>
             )}
 
-            <FFButton type="submit" variant="primary" size="lg" disabled={submitting} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
+            <KVButton type="submit" variant="primary" size="lg" disabled={submitting} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
               {submitting ? 'Aguarde...' : (mode === 'signup' ? 'Ativar acesso' : 'Entrar')}
-            </FFButton>
+            </KVButton>
           </form>
         </div>
       </div>

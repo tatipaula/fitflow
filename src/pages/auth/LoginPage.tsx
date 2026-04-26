@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
-import { FFLogo, FFButton } from '@/components/ui'
+import { KVLogo, KVButton } from '@/components/ui'
+import { PWAInstallBanner } from '@/components/ui/PWAInstallBanner'
 
 type Mode = 'login' | 'signup'
 
@@ -80,7 +81,7 @@ export default function LoginPage() {
       <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: '100%', maxWidth: 360, padding: '0 24px', textAlign: 'center' }}>
           <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'center' }}>
-            <FFLogo size={36}/>
+            <KVLogo size={36}/>
           </div>
           <div className="display" style={{ fontSize: 28, marginBottom: 12 }}>Verifique seu email</div>
           <p style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.6 }}>
@@ -99,10 +100,11 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <PWAInstallBanner />
       <div style={{ width: '100%', maxWidth: 380, padding: '0 24px' }}>
         {/* Logo */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 40 }}>
-          <FFLogo size={40}/>
+          <KVLogo size={40}/>
         </div>
 
         {/* Card */}
@@ -114,7 +116,7 @@ export default function LoginPage() {
             {mode === 'login' ? 'Entrar' : 'Criar conta'}
           </div>
           <p style={{ fontSize: 13, color: 'var(--fg-3)', marginBottom: 28 }}>
-            {mode === 'login' ? 'Entre com seu email e senha.' : 'Comece a usar o FitFlow.'}
+            {mode === 'login' ? 'Entre com seu email e senha.' : 'Comece a usar o Kinevia.'}
           </p>
 
           {/* Mode toggle */}
@@ -159,11 +161,11 @@ export default function LoginPage() {
               </div>
             )}
 
-            <FFButton type="submit" variant="primary" size="lg" disabled={submitting} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
+            <KVButton type="submit" variant="primary" size="lg" disabled={submitting} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
               {submitting
                 ? (mode === 'login' ? 'Entrando...' : 'Criando conta...')
                 : (mode === 'login' ? 'Entrar' : 'Criar conta')}
-            </FFButton>
+            </KVButton>
           </form>
         </div>
       </div>

@@ -10,7 +10,7 @@ export default function LoadingSpinner({ size = 'md', message }: LoadingSpinnerP
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <svg width={px} height={px} viewBox={`0 0 ${px} ${px}`}
-        style={{ animation: 'ff-spin 0.8s linear infinite', flexShrink: 0 }}>
+        style={{ animation: 'kv-spin 0.8s linear infinite', flexShrink: 0 }}>
         <circle cx={px/2} cy={px/2} r={r} fill="none" stroke="var(--ink-4)" strokeWidth="1.5"/>
         <circle cx={px/2} cy={px/2} r={r} fill="none" stroke="var(--accent)" strokeWidth="1.5"
           strokeDasharray={circ} strokeDashoffset={circ * 0.75}

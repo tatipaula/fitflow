@@ -1,4 +1,4 @@
-# FitFlow — CLAUDE.md
+# Kinevia — CLAUDE.md
 
 ## Contexto do produto
 App B2B para personal trainers. O personal paga, o aluno acessa grátis via link.

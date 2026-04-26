@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react'
 
 // ─── Logo ───────────────────────────────────────────────────────────────────
 
-export function FFLogo({ size = 28, color = 'var(--fg-1)' }: { size?: number; color?: string }) {
+export function KVLogo({ size = 28, color = 'var(--fg-1)' }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
       <circle cx="20" cy="20" r="19" stroke={color} strokeWidth="1"/>
@@ -15,19 +15,19 @@ export function FFLogo({ size = 28, color = 'var(--fg-1)' }: { size?: number; co
   )
 }
 
-export function FFWordmark({ size = 18, color = 'var(--fg-1)' }: { size?: number; color?: string }) {
+export function KVWordmark({ size = 18, color = 'var(--fg-1)' }: { size?: number; color?: string }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8,
       fontFamily: 'var(--f-display)', fontSize: size * 1.4, color, letterSpacing: -0.01 }}>
-      <FFLogo size={size * 1.3} color={color}/>
-      <span style={{ fontStyle: 'italic', fontWeight: 400, fontFamily: "'Instrument Serif', serif" }}>Fit Flow</span>
+      <KVLogo size={size * 1.3} color={color}/>
+      <span style={{ fontStyle: 'italic', fontWeight: 400, fontFamily: "'Instrument Serif', serif" }}>Kinevia</span>
     </div>
   )
 }
 
 // ─── Button ─────────────────────────────────────────────────────────────────
 
-interface FFButtonProps {
+interface KVButtonProps {
   children: ReactNode
   variant?: 'primary' | 'secondary' | 'ghost' | 'light'
   size?: 'sm' | 'md' | 'lg'
@@ -39,10 +39,10 @@ interface FFButtonProps {
   type?: 'button' | 'submit' | 'reset'
 }
 
-export function FFButton({
+export function KVButton({
   children, variant = 'primary', size = 'md',
   icon, iconRight, style = {}, onClick, disabled, type = 'button',
-}: FFButtonProps) {
+}: KVButtonProps) {
   const sizes = { sm: { h: 32, px: 14, fs: 12 }, md: { h: 42, px: 18, fs: 13 }, lg: { h: 52, px: 24, fs: 14 } }
   const s = sizes[size]
   const variants = {
@@ -79,13 +79,13 @@ export function FFButton({
 
 // ─── Tag ────────────────────────────────────────────────────────────────────
 
-interface FFTagProps {
+interface KVTagProps {
   children: ReactNode
   tone?: 'neutral' | 'accent' | 'success' | 'outline'
   style?: CSSProperties
 }
 
-export function FFTag({ children, tone = 'neutral', style = {} }: FFTagProps) {
+export function KVTag({ children, tone = 'neutral', style = {} }: KVTagProps) {
   const tones = {
     neutral: { bg: 'var(--ink-3)', fg: 'var(--fg-2)', bd: 'var(--ink-4)' },
     accent:  { bg: 'var(--accent-soft)', fg: 'var(--accent)', bd: 'transparent' },
@@ -108,13 +108,13 @@ export function FFTag({ children, tone = 'neutral', style = {} }: FFTagProps) {
 
 // ─── Card ────────────────────────────────────────────────────────────────────
 
-interface FFCardProps {
+interface KVCardProps {
   children: ReactNode
   elevated?: boolean
   style?: CSSProperties
 }
 
-export function FFCard({ children, elevated = false, style = {} }: FFCardProps) {
+export function KVCard({ children, elevated = false, style = {} }: KVCardProps) {
   return (
     <div style={{
       background: elevated ? 'var(--ink-3)' : 'var(--ink-2)',
@@ -128,7 +128,7 @@ export function FFCard({ children, elevated = false, style = {} }: FFCardProps) 
 
 // ─── Meter ───────────────────────────────────────────────────────────────────
 
-export function FFMeter({ value = 0.5, color = 'var(--accent)', height = 2 }: { value?: number; color?: string; height?: number }) {
+export function KVMeter({ value = 0.5, color = 'var(--accent)', height = 2 }: { value?: number; color?: string; height?: number }) {
   return (
     <div style={{ height, background: 'var(--ink-4)', borderRadius: 999, overflow: 'hidden', width: '100%' }}>
       <div style={{ height: '100%', width: `${Math.min(1, Math.max(0, value)) * 100}%`, background: color, transition: 'width 0.5s ease' }} />
@@ -138,7 +138,7 @@ export function FFMeter({ value = 0.5, color = 'var(--accent)', height = 2 }: { 
 
 // ─── Divider ─────────────────────────────────────────────────────────────────
 
-export function FFDivider({ label, style = {} }: { label?: string; style?: CSSProperties }) {
+export function KVDivider({ label, style = {} }: { label?: string; style?: CSSProperties }) {
   if (!label) return <div style={{ height: 1, background: 'var(--ink-4)', ...style }} />
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, ...style }}>
@@ -151,7 +151,7 @@ export function FFDivider({ label, style = {} }: { label?: string; style?: CSSPr
 
 // ─── Avatar ──────────────────────────────────────────────────────────────────
 
-export function FFAvatar({ name = 'AB', size = 36, tone = 'default' }: { name?: string; size?: number; tone?: 'default' | 'warm' | 'cool' | 'accent' }) {
+export function KVAvatar({ name = 'AB', size = 36, tone = 'default' }: { name?: string; size?: number; tone?: 'default' | 'warm' | 'cool' | 'accent' }) {
   const initials = name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
   const bgs: Record<string, string> = {
     default: 'linear-gradient(135deg, #2A2823, #1A1816)',
@@ -174,7 +174,7 @@ export function FFAvatar({ name = 'AB', size = 36, tone = 'default' }: { name?: 
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
 
-export const FFIcon = {
+export const KVIcon = {
   mic: (s = 18, c = 'currentColor') => (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4">
       <rect x="9" y="3" width="6" height="12" rx="3"/>

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { FFLogo, FFButton, FFTag, FFAvatar, FFIcon } from '@/components/ui'
+import { KVLogo, KVButton, KVTag, KVAvatar, KVIcon } from '@/components/ui'
 import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
 import type { Workout, Exercise, SessionWithLogs } from '@/types'
@@ -201,27 +201,27 @@ export default function WorkoutPage() {
     <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
       <div style={{ textAlign: 'center', maxWidth: 320 }}>
         <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-          {FFIcon.check(28, 'var(--accent)')}
+          {KVIcon.check(28, 'var(--accent)')}
         </div>
         <div className="display" style={{ fontSize: 36, marginBottom: 8 }}>Treino concluído!</div>
         <p style={{ fontSize: 14, color: 'var(--fg-2)', marginBottom: 28, lineHeight: 1.6 }}>
           Ótimo trabalho, {athlete?.name?.split(' ')[0] ?? ''}!
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <FFButton variant="primary" size="lg" style={{ width: '100%', justifyContent: 'center' }}
+          <KVButton variant="primary" size="lg" style={{ width: '100%', justifyContent: 'center' }}
             onClick={async () => {
               if (athlete) { const s = await getAthleteSessions(athlete.id); setSessions(s) }
               setCompleted(false); resetWorkout()
             }}>
             {availableWorkouts.length > 1 ? 'Escolher próximo treino' : 'Voltar'}
-          </FFButton>
-          <FFButton variant="ghost" size="md" style={{ width: '100%', justifyContent: 'center' }}
+          </KVButton>
+          <KVButton variant="ghost" size="md" style={{ width: '100%', justifyContent: 'center' }}
             onClick={async () => {
               if (athlete) { const s = await getAthleteSessions(athlete.id); setSessions(s) }
               setCompleted(false); resetWorkout(); setTab('evolucao')
             }}>
             Ver minha evolução
-          </FFButton>
+          </KVButton>
         </div>
       </div>
     </div>
@@ -229,8 +229,8 @@ export default function WorkoutPage() {
 
   // ── Bottom nav ────────────────────────────────────────────────────────────
   const navItems: { key: AthleteTab; label: string; icon: (size: number, color: string) => React.ReactNode }[] = [
-    { key: 'treinos', label: 'Treinos', icon: FFIcon.dumbbell },
-    { key: 'evolucao', label: 'Evolução', icon: FFIcon.flame },
+    { key: 'treinos', label: 'Treinos', icon: KVIcon.dumbbell },
+    { key: 'evolucao', label: 'Evolução', icon: KVIcon.flame },
   ]
 
   const bottomNav = (
@@ -238,7 +238,7 @@ export default function WorkoutPage() {
       {restTimer && (
         <div style={{ padding: '10px 20px', background: 'var(--ink-3)', borderTop: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {FFIcon.clock(15, 'var(--accent)')}
+            {KVIcon.clock(15, 'var(--accent)')}
             <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>Descansando</span>
           </div>
           <div className="num" style={{ fontSize: 22, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
@@ -270,14 +270,14 @@ export default function WorkoutPage() {
   const pageHeader = (label: string) => (
     <div style={{ padding: '54px 20px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <FFLogo size={22}/>
+        <KVLogo size={22}/>
         <div className="eyebrow">{label}</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={handleSignOut} style={{ fontSize: 11, color: 'var(--fg-1)', background: 'none', border: '1px solid var(--fg-2)', borderRadius: 999, padding: '4px 12px', cursor: 'pointer', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.06em' }}>
           Sair
         </button>
-        <FFAvatar name={athlete?.name ?? 'A'} size={32} tone="warm"/>
+        <KVAvatar name={athlete?.name ?? 'A'} size={32} tone="warm"/>
       </div>
     </div>
   )
@@ -374,7 +374,7 @@ export default function WorkoutPage() {
             <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', padding: '36px 24px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', top: 0, left: 20, right: 20, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
               <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                {FFIcon.dumbbell(24, 'var(--fg-3)')}
+                {KVIcon.dumbbell(24, 'var(--fg-3)')}
               </div>
               <div className="display" style={{ fontSize: 26, marginBottom: 8 }}>Nenhum treino ainda</div>
               <p style={{ fontSize: 14, color: 'var(--fg-3)', lineHeight: 1.7, maxWidth: 260, margin: '0 auto' }}>
@@ -427,7 +427,7 @@ export default function WorkoutPage() {
                 style={{ width: '100%', textAlign: 'left', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: '18px 20px', cursor: 'pointer', color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
                 <div style={{ width: 44, height: 44, borderRadius: 'var(--r-md)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {FFIcon.dumbbell(20, 'var(--accent)')}
+                  {KVIcon.dumbbell(20, 'var(--accent)')}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -437,7 +437,7 @@ export default function WorkoutPage() {
                     {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
                   </div>
                 </div>
-                {FFIcon.chevR(14, 'var(--fg-4)')}
+                {KVIcon.chevR(14, 'var(--fg-4)')}
               </button>
             ))}
           </div>
@@ -450,11 +450,11 @@ export default function WorkoutPage() {
             <div style={{ position: 'absolute', top: 0, left: 20, right: 20, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.6 }}/>
             <div style={{ padding: '20px 20px 16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <FFTag tone="accent">TREINO DE HOJE</FFTag>
+                <KVTag tone="accent">TREINO DE HOJE</KVTag>
                 {availableWorkouts.length > 1 && !started && (
                   <button onClick={resetWorkout}
                     style={{ fontSize: 11, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'JetBrains Mono', monospace" }}>
-                    {FFIcon.chevL(10, 'var(--fg-3)')} Trocar ficha
+                    {KVIcon.chevL(10, 'var(--fg-3)')} Trocar ficha
                   </button>
                 )}
               </div>
@@ -523,7 +523,7 @@ export default function WorkoutPage() {
                   >
                     <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${isAllDone ? 'var(--accent)' : 'var(--ink-4)'}`, background: isAllDone ? 'var(--accent-soft)' : 'transparent' }}>
                       {isAllDone
-                        ? FFIcon.check(11, 'var(--accent)')
+                        ? KVIcon.check(11, 'var(--accent)')
                         : <span className="num" style={{ fontSize: 9, color: 'var(--fg-3)' }}>{String(i + 1).padStart(2, '0')}</span>
                       }
                     </div>
@@ -547,7 +547,7 @@ export default function WorkoutPage() {
 
                     {started && !isAllDone && (
                       <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}>
-                        {FFIcon.chevR(12, 'var(--fg-4)')}
+                        {KVIcon.chevR(12, 'var(--fg-4)')}
                       </div>
                     )}
                   </button>
@@ -590,7 +590,7 @@ export default function WorkoutPage() {
 
                       <button onClick={() => handleLogSet(ex)} disabled={savingSet || !repsByEx[ex.id]}
                         style={{ width: '100%', height: 50, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: savingSet || !repsByEx[ex.id] ? 'not-allowed' : 'pointer', opacity: savingSet || !repsByEx[ex.id] ? 0.5 : 1 }}>
-                        {FFIcon.check(16, 'var(--accent-ink)')}
+                        {KVIcon.check(16, 'var(--accent-ink)')}
                         {savingSet ? 'Salvando...' : `Concluir série — ${repsByEx[ex.id] ?? ''} reps${weightByEx[ex.id] ? `, ${weightByEx[ex.id]} kg` : ''}`}
                       </button>
 
