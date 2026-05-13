@@ -12,7 +12,29 @@ export interface LibraryGroup {
   exercises: LibraryExercise[]
 }
 
+export const CARDIO_EXERCISE_NAMES: string[] = [
+  'Corrida na esteira', 'Bicicleta ergométrica', 'Corda', 'Burpee', 'Polichinelo',
+  'Step', 'Elíptico', 'Sprint', 'Jumping jack', 'Mountain climber',
+  'Pular corda', 'Remo ergométrico', 'Escada rolante', 'Skipping', 'Box jump',
+]
+
 export const EXERCISE_LIBRARY: LibraryGroup[] = [
+  {
+    key: 'cardio',
+    label: 'Cardio',
+    exercises: [
+      { name: 'Corrida na esteira', sets: 1, reps: 20, rest: 0, timed: true },
+      { name: 'Bicicleta ergométrica', sets: 1, reps: 20, rest: 0, timed: true },
+      { name: 'Corda', sets: 3, reps: 60, rest: 30, timed: true },
+      { name: 'Burpee', sets: 3, reps: 15, rest: 30, timed: false },
+      { name: 'Polichinelo', sets: 3, reps: 40, rest: 20, timed: false },
+      { name: 'Step', sets: 3, reps: 30, rest: 20, timed: true },
+      { name: 'Elíptico', sets: 1, reps: 20, rest: 0, timed: true },
+      { name: 'Sprint', sets: 5, reps: 30, rest: 60, timed: true },
+      { name: 'Jumping jack', sets: 3, reps: 30, rest: 20, timed: false },
+      { name: 'Mountain climber', sets: 3, reps: 30, rest: 30, timed: true },
+    ],
+  },
   {
     key: 'peito',
     label: 'Peito',

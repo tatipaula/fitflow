@@ -150,13 +150,20 @@ export function KVDivider({ label, style = {} }: { label?: string; style?: CSSPr
 
 // ─── Avatar ──────────────────────────────────────────────────────────────────
 
-export function KVAvatar({ name = 'AB', size = 36, tone = 'default' }: { name?: string; size?: number; tone?: 'default' | 'warm' | 'cool' | 'accent' }) {
+export function KVAvatar({ name = 'AB', size = 36, tone = 'default', src }: { name?: string; size?: number; tone?: 'default' | 'warm' | 'cool' | 'accent'; src?: string | null }) {
   const initials = name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
   const bgs: Record<string, string> = {
     default: 'linear-gradient(135deg, #2A2823, #1A1816)',
     warm:    'linear-gradient(135deg, #3D3326, #1F1A15)',
     cool:    'linear-gradient(135deg, #1E2228, #0E1014)',
     accent:  'var(--accent)',
+  }
+  if (src) {
+    return (
+      <div style={{ width: size, height: size, borderRadius: '50%', border: '1px solid var(--ink-4)', overflow: 'hidden', flexShrink: 0 }}>
+        <img src={src} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+      </div>
+    )
   }
   return (
     <div style={{

@@ -10,17 +10,19 @@ import {
   assignWorkoutToAthletes, getParqResponse,
   checkInAthlete, getAthleteCheckins, getCheckinCountsByTrainer, updateAthleteSessionPackage,
   updateAthleteBilling, updateTrainerPixKey, isBillingDue,
+  getAthleteRankingStats, getBadgesByTrainer, createBadge, deleteBadge,
 } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
 import { EXERCISE_LIBRARY } from '@/lib/exerciseLibrary'
-import type { Athlete, Workout, Exercise, Invite, ParqResponse, ClassCheckin } from '@/types'
+import type { Athlete, AthleteRankingStats, Badge, Workout, Exercise, Invite, ParqResponse, ClassCheckin } from '@/types'
 
-type TrainerView = 'home' | 'athletes' | 'workouts' | 'recording' | 'processing' | 'review' | 'sent' | 'athlete-detail'
+type TrainerView = 'home' | 'athletes' | 'workouts' | 'recording' | 'processing' | 'review' | 'sent' | 'athlete-detail' | 'ranking'
 
 const NAV_ITEMS: { key: TrainerView; label: string; icon: (c?: string) => JSX.Element }[] = [
   { key: 'home',     label: 'Dashboard', icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
   { key: 'athletes', label: 'Alunos',    icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2" strokeLinecap="round"/><path d="M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.87" strokeLinecap="round"/></svg> },
   { key: 'workouts', label: 'Treinos',   icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round"><rect x="2" y="9" width="3" height="6" rx="0.5"/><rect x="19" y="9" width="3" height="6" rx="0.5"/><rect x="5" y="10.5" width="2" height="3"/><rect x="17" y="10.5" width="2" height="3"/><path d="M7 12h10"/></svg> },
+  { key: 'ranking',  label: 'Ranking',   icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> },
 ]
 
 function useIsMobile() {
@@ -109,9 +111,23 @@ export default function DashboardPage() {
   const [pixKeyValue, setPixKeyValue] = useState('')
   const [trainerPixKey, setTrainerPixKey] = useState<string | null>(null)
 
+  // Ranking
+  type RankingCategory = 'sessions' | 'totalLoad' | 'cardioExercises' | 'checkins'
+  const [rankingStats, setRankingStats] = useState<AthleteRankingStats[]>([])
+  const [rankingCategory, setRankingCategory] = useState<RankingCategory>('sessions')
+  const [loadingRanking, setLoadingRanking] = useState(false)
+
+  // Badges
+  const [trainerBadges, setTrainerBadges] = useState<Badge[]>([])
+  const [showBadgeModal, setShowBadgeModal] = useState<string | null>(null) // athleteId
+  const [badgeIcon, setBadgeIcon] = useState('🏆')
+  const [badgeTitle, setBadgeTitle] = useState('')
+  const [creatingBadge, setCreatingBadge] = useState(false)
+  const [confirmDeleteBadgeId, setConfirmDeleteBadgeId] = useState<string | null>(null)
+
   // Exercise library
   const [showLibrary, setShowLibrary] = useState(false)
-  const [libraryGroup, setLibraryGroup] = useState('peito')
+  const [libraryGroup, setLibraryGroup] = useState('cardio')
 
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null)
   const [exercises, setExercises] = useState<Record<string, Exercise[]>>({})
@@ -128,8 +144,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!trainer) { setLoadingData(false); return }
     setTrainerPixKey(trainer.pix_key ?? null)
-    Promise.all([getAthletes(trainer.id), getWorkouts(trainer.id), getCheckinCountsByTrainer(trainer.id)])
-      .then(([a, w, counts]) => { setAthletes(a); setWorkouts(w); setCheckinCounts(counts) })
+    Promise.all([getAthletes(trainer.id), getWorkouts(trainer.id), getCheckinCountsByTrainer(trainer.id), getBadgesByTrainer(trainer.id)])
+      .then(([a, w, counts, badges]) => { setAthletes(a); setWorkouts(w); setCheckinCounts(counts); setTrainerBadges(badges) })
       .catch(console.error)
       .finally(() => setLoadingData(false))
   }, [trainer])
@@ -382,6 +398,31 @@ export default function DashboardPage() {
     setPixKeyEdit(false)
   }
 
+  async function handleLoadRanking() {
+    if (!trainer) return
+    setLoadingRanking(true)
+    const stats = await getAthleteRankingStats(trainer.id)
+    setRankingStats(stats)
+    setLoadingRanking(false)
+  }
+
+  async function handleCreateBadge(athleteId: string) {
+    if (!trainer || !badgeTitle.trim()) return
+    setCreatingBadge(true)
+    const badge = await createBadge(trainer.id, athleteId, badgeIcon, badgeTitle.trim())
+    if (badge) setTrainerBadges((p) => [badge, ...p])
+    setBadgeTitle('')
+    setBadgeIcon('🏆')
+    setShowBadgeModal(null)
+    setCreatingBadge(false)
+  }
+
+  async function handleDeleteBadge(badgeId: string) {
+    const ok = await deleteBadge(badgeId)
+    if (ok) setTrainerBadges((p) => p.filter((b) => b.id !== badgeId))
+    setConfirmDeleteBadgeId(null)
+  }
+
   async function handleSavePackage(athleteId: string) {
     const total = parseInt(packageEditValue) || 0
     const ok = await updateAthleteSessionPackage(athleteId, total)
@@ -417,9 +458,9 @@ export default function DashboardPage() {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
         {NAV_ITEMS.map(({ key, label, icon }) => {
-          const active = view === key || (key === 'workouts' && (view === 'recording' || view === 'processing'))
+          const active = view === key || (key === 'workouts' && (view === 'recording' || view === 'processing')) || (key === 'athletes' && view === 'athlete-detail')
           return (
-            <button key={key} onClick={() => setView(key)}
+            <button key={key} onClick={() => { setView(key); if (key === 'ranking' && rankingStats.length === 0) setTimeout(handleLoadRanking, 0) }}
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--r-md)', background: active ? 'var(--accent-soft)' : 'transparent', color: active ? 'var(--accent)' : 'var(--fg-2)', fontSize: 14, border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%' }}>
               {icon(active ? 'var(--accent)' : 'var(--fg-2)')}
               {label}
@@ -483,9 +524,9 @@ export default function DashboardPage() {
   const mobileBottomNav = isMobile && (
     <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'var(--ink-1)', borderTop: '1px solid var(--ink-4)', display: 'flex', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {NAV_ITEMS.map(({ key, label, icon }) => {
-        const active = view === key || (key === 'workouts' && (view === 'recording' || view === 'processing'))
+        const active = view === key || (key === 'workouts' && (view === 'recording' || view === 'processing')) || (key === 'athletes' && view === 'athlete-detail')
         return (
-          <button key={key} onClick={() => setView(key)}
+          <button key={key} onClick={() => { setView(key); if (key === 'ranking' && rankingStats.length === 0) setTimeout(handleLoadRanking, 0) }}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 4px', background: 'none', border: 'none', color: active ? 'var(--accent)' : 'var(--fg-3)', fontSize: 10, cursor: 'pointer' }}>
             {icon(active ? 'var(--accent)' : 'var(--fg-3)')}
             {label}
@@ -705,15 +746,24 @@ export default function DashboardPage() {
               <Card key={a.id} style={{ padding: 20 }}>
                 <button onClick={() => handleViewAthleteDetail(a)}
                   style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14, width: '100%', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, textAlign: 'left' }}>
-                  <KVAvatar name={a.name} size={44} tone="warm"/>
+                  <KVAvatar name={a.name} size={44} tone="warm" src={a.avatar_url}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
-                      {KVIcon.chevR(14, 'var(--fg-4)')}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                        {trainerBadges.filter((b) => b.athlete_id === a.id).slice(0, 3).map((b) => (
+                          <span key={b.id} title={b.title} style={{ fontSize: 14 }}>{b.icon}</span>
+                        ))}
+                        {KVIcon.chevR(14, 'var(--fg-4)')}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: aw.length > 0 ? 'var(--accent)' : 'var(--fg-3)', marginTop: 2 }}>
-                      {aw.length > 0 ? 'Ativo' : 'Pendente'}
-                    </div>
+                    {a.objective ? (
+                      <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.objective}</div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: aw.length > 0 ? 'var(--accent)' : 'var(--fg-3)', marginTop: 2 }}>
+                        {aw.length > 0 ? 'Ativo' : 'Pendente'}
+                      </div>
+                    )}
                   </div>
                 </button>
                 <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 10 }}>
@@ -1233,13 +1283,16 @@ export default function DashboardPage() {
           style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fg-2)" strokeWidth="1.8" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         </button>
-        <KVAvatar name={selectedAthleteForDetail.name} size={44} tone="warm"/>
-        <div>
+        <KVAvatar name={selectedAthleteForDetail.name} size={52} tone="warm" src={selectedAthleteForDetail.avatar_url}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div className="display" style={{ fontSize: isMobile ? 24 : 30 }}>{selectedAthleteForDetail.name}</div>
           {(selectedAthleteForDetail.email || selectedAthleteForDetail.phone) && (
             <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>
               {selectedAthleteForDetail.email ?? selectedAthleteForDetail.phone}
             </div>
+          )}
+          {selectedAthleteForDetail.objective && (
+            <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4, fontStyle: 'italic' }}>{selectedAthleteForDetail.objective}</div>
           )}
         </div>
         <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
@@ -1295,6 +1348,73 @@ export default function DashboardPage() {
               </Card>
             )}
           </div>
+
+          {/* Perfil do atleta */}
+          {(selectedAthleteForDetail.height_cm || selectedAthleteForDetail.weight_kg || selectedAthleteForDetail.birth_date) && (
+            <div style={{ marginBottom: 24 }}>
+              <div className="eyebrow" style={{ marginBottom: 12 }}>Dados pessoais</div>
+              <Card style={{ padding: '16px 18px' }}>
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                  {selectedAthleteForDetail.birth_date && (
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>Nascimento</div>
+                      <div className="num" style={{ fontSize: 15 }}>{new Date(selectedAthleteForDetail.birth_date + 'T12:00:00').toLocaleDateString('pt-BR')}</div>
+                    </div>
+                  )}
+                  {selectedAthleteForDetail.height_cm && (
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>Altura</div>
+                      <div className="num" style={{ fontSize: 15 }}>{selectedAthleteForDetail.height_cm} cm</div>
+                    </div>
+                  )}
+                  {selectedAthleteForDetail.weight_kg && (
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>Peso</div>
+                      <div className="num" style={{ fontSize: 15 }}>{selectedAthleteForDetail.weight_kg} kg</div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* Badges */}
+          {(() => {
+            const athleteBadges = trainerBadges.filter((b) => b.athlete_id === selectedAthleteForDetail.id)
+            return (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div className="eyebrow">Badges</div>
+                  <button onClick={() => { setShowBadgeModal(selectedAthleteForDetail.id); setBadgeTitle(''); setBadgeIcon('🏆') }}
+                    style={{ height: 30, padding: '0 12px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    + Atribuir Badge
+                  </button>
+                </div>
+                <Card style={{ padding: '14px 16px' }}>
+                  {athleteBadges.length === 0 ? (
+                    <div style={{ fontSize: 13, color: 'var(--fg-4)' }}>Nenhum badge atribuído ainda.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {athleteBadges.map((b) => (
+                        <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 999, fontSize: 13 }}>
+                          <span style={{ fontSize: 16 }}>{b.icon}</span>
+                          <span style={{ color: 'var(--fg-1)' }}>{b.title}</span>
+                          {confirmDeleteBadgeId === b.id ? (
+                            <>
+                              <button onClick={() => handleDeleteBadge(b.id)} style={{ fontSize: 11, color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Remover</button>
+                              <button onClick={() => setConfirmDeleteBadgeId(null)} style={{ fontSize: 11, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+                            </>
+                          ) : (
+                            <button onClick={() => setConfirmDeleteBadgeId(b.id)} style={{ fontSize: 11, color: 'var(--fg-4)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px' }}>×</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+            )
+          })()}
 
           {/* PAR-Q */}
           {athleteParq !== undefined && (
@@ -1519,6 +1639,139 @@ export default function DashboardPage() {
     </div>
   )
 
+  // ── BADGE MODAL ───────────────────────────────────────────────────────────
+  const BADGE_ICONS = ['🏆', '⭐', '🔥', '💪', '🎯', '🏅', '👑', '⚡', '🌟', '🥇', '🎖️', '💎', '🦁', '🚀', '❤️']
+
+  const badgeModal = showBadgeModal && (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', padding: '28px 24px', maxWidth: 360, width: '100%' }}>
+        <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 20 }}>Atribuir Badge</div>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Ícone</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+            {BADGE_ICONS.map((icon) => (
+              <button key={icon} onClick={() => setBadgeIcon(icon)}
+                style={{ height: 44, borderRadius: 'var(--r-md)', fontSize: 22, background: badgeIcon === icon ? 'var(--accent-soft)' : 'var(--ink-1)', border: `1px solid ${badgeIcon === icon ? 'var(--accent)' : 'var(--ink-4)'}`, cursor: 'pointer' }}>
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Título</div>
+          <input autoFocus value={badgeTitle} onChange={(e) => setBadgeTitle(e.target.value)}
+            placeholder="Ex: Aluno do Mês, Rei do Cardio..."
+            style={{ width: '100%', height: 44, padding: '0 14px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box' }}/>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => handleCreateBadge(showBadgeModal)} disabled={!badgeTitle.trim() || creatingBadge}
+            style={{ flex: 1, height: 44, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: !badgeTitle.trim() || creatingBadge ? 0.5 : 1 }}>
+            {creatingBadge ? 'Salvando...' : `${badgeIcon} Atribuir`}
+          </button>
+          <button onClick={() => setShowBadgeModal(null)}
+            style={{ height: 44, padding: '0 16px', borderRadius: 999, background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--ink-4)', fontSize: 14, cursor: 'pointer' }}>
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ── RANKING VIEW ──────────────────────────────────────────────────────────
+  const RANKING_CATEGORIES: { key: 'sessions' | 'totalLoad' | 'cardioExercises' | 'checkins'; label: string; unit: string }[] = [
+    { key: 'sessions',        label: 'Treinos',      unit: 'treinos' },
+    { key: 'totalLoad',       label: 'Carga Total',  unit: 'kg' },
+    { key: 'cardioExercises', label: 'Cardio',       unit: 'exerc.' },
+    { key: 'checkins',        label: 'Check-ins',    unit: 'aulas' },
+  ]
+
+  const sortedRanking = [...rankingStats].sort((a, b) => b[rankingCategory] - a[rankingCategory])
+  const podium = sortedRanking.slice(0, 3)
+  const catInfo = RANKING_CATEGORIES.find((c) => c.key === rankingCategory)!
+
+  const rankingView = (
+    <div style={contentStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, gap: 12 }}>
+        <div className="display" style={{ fontSize: isMobile ? 30 : 36 }}>Ranking</div>
+        <button onClick={handleLoadRanking} disabled={loadingRanking}
+          style={{ height: 38, padding: '0 16px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-2)', fontSize: 13, cursor: 'pointer', opacity: loadingRanking ? 0.6 : 1 }}>
+          {loadingRanking ? 'Carregando...' : 'Atualizar'}
+        </button>
+      </div>
+
+      {/* Category selector */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 28, flexWrap: 'wrap' }}>
+        {RANKING_CATEGORIES.map((cat) => (
+          <button key={cat.key} onClick={() => setRankingCategory(cat.key)}
+            style={{ height: 34, padding: '0 16px', borderRadius: 999, fontSize: 13, fontWeight: 500, cursor: 'pointer', background: rankingCategory === cat.key ? 'var(--accent)' : 'var(--ink-2)', color: rankingCategory === cat.key ? 'var(--accent-ink)' : 'var(--fg-2)', border: rankingCategory === cat.key ? 'none' : '1px solid var(--ink-4)' }}>
+            {cat.label}
+          </button>
+        ))}
+      </div>
+
+      {loadingRanking ? (
+        <LoadingSpinner size="lg" message="Calculando ranking..."/>
+      ) : rankingStats.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 0' }}>
+          <div style={{ fontSize: 14, color: 'var(--fg-4)', marginBottom: 16 }}>Sem dados para exibir. Clique em Atualizar para carregar.</div>
+          <button onClick={handleLoadRanking}
+            style={{ height: 42, padding: '0 24px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+            Carregar ranking
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Podium */}
+          {podium.length > 0 && (
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: isMobile ? 8 : 16 }}>
+                {[1, 0, 2].map((podiumIdx) => {
+                  const entry = podium[podiumIdx]
+                  if (!entry) return <div key={podiumIdx} style={{ flex: 1, maxWidth: isMobile ? 90 : 120 }}/>
+                  const heights = [96, 128, 76]
+                  const medalColors = ['#C0C0C0', '#FFD700', '#CD7F32']
+                  const medals = ['🥈', '🥇', '🥉']
+                  return (
+                    <div key={entry.athlete.id} style={{ flex: 1, maxWidth: isMobile ? 90 : 120, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                      <KVAvatar name={entry.athlete.name} size={podiumIdx === 0 ? 56 : 44} tone="warm" src={entry.athlete.avatar_url}/>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 80 : 110 }}>{entry.athlete.name.split(' ')[0]}</div>
+                        <div className="num" style={{ fontSize: 13, color: 'var(--accent)', marginTop: 2 }}>{entry[rankingCategory]} {catInfo.unit}</div>
+                      </div>
+                      <div style={{ width: '100%', height: heights[podiumIdx], background: 'var(--ink-2)', border: `1px solid ${medalColors[podiumIdx]}`, borderBottom: 'none', borderRadius: 'var(--r-md) var(--r-md) 0 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 10 }}>
+                        <span style={{ fontSize: 20 }}>{medals[podiumIdx]}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ height: 2, background: 'var(--ink-4)', borderRadius: 1 }}/>
+            </div>
+          )}
+
+          {/* Full list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {sortedRanking.map((entry, i) => (
+              <Card key={entry.athlete.id} style={{ padding: '12px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span className="num" style={{ fontSize: 13, color: 'var(--fg-3)', width: 20, textAlign: 'right', flexShrink: 0 }}>#{i + 1}</span>
+                  <KVAvatar name={entry.athlete.name} size={36} tone="warm" src={entry.athlete.avatar_url}/>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.athlete.name}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, flexShrink: 0 }}>
+                    <span className="num" style={{ fontSize: 18, color: i < 3 ? 'var(--accent)' : 'var(--fg-1)' }}>{entry[rankingCategory]}</span>
+                    <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{catInfo.unit}</span>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+
   // ── LIBRARY MODAL ─────────────────────────────────────────────────────────
   const activeGroup = EXERCISE_LIBRARY.find((g) => g.key === libraryGroup) ?? EXERCISE_LIBRARY[0]
 
@@ -1604,10 +1857,12 @@ export default function DashboardPage() {
         {view === 'processing'    && processingView}
         {view === 'review'        && reviewView}
         {view === 'sent'          && sentView}
+        {view === 'ranking'       && rankingView}
       </div>
       {mobileBottomNav}
       {assignModal}
       {libraryModal}
+      {badgeModal}
     </div>
   )
 }

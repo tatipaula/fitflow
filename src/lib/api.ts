@@ -6,6 +6,8 @@
 
 import type {
   Athlete,
+  AthleteRankingStats,
+  Badge,
   ClassCheckin,
   CreateAthleteInput,
   CreateWorkoutInput,
@@ -21,6 +23,7 @@ import type {
   Workout,
 } from '@/types'
 import { parseWorkoutFromTranscript } from './claude'
+import { CARDIO_EXERCISE_NAMES } from './exerciseLibrary'
 import { supabase } from './supabase'
 import { transcribeAudio } from './whisper'
 import { searchExerciseVideo } from './youtube'
@@ -566,5 +569,126 @@ export async function updateTrainerPixKey(pixKey: string): Promise<boolean> {
     .from('trainers')
     .update({ pix_key: pixKey || null })
     .eq('id', session.user.id)
+  return !error
+}
+
+// ─── Athlete profile ──────────────────────────────────────────────────────────
+
+export async function updateAthleteProfile(
+  athleteId: string,
+  data: Partial<Pick<Athlete, 'phone' | 'weight_kg' | 'birth_date' | 'height_cm' | 'objective' | 'avatar_url'>>,
+): Promise<boolean> {
+  const { error } = await supabase.from('athletes').update(data).eq('id', athleteId)
+  return !error
+}
+
+export async function uploadAthleteAvatar(athleteId: string, file: File): Promise<string | null> {
+  const ext = file.name.split('.').pop() ?? 'jpg'
+  const path = `${athleteId}/avatar.${ext}`
+  const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+  if (error) { console.error('[uploadAthleteAvatar]', error); return null }
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+  const url = `${data.publicUrl}?t=${Date.now()}`
+  await updateAthleteProfile(athleteId, { avatar_url: url })
+  return url
+}
+
+// ─── Ranking ──────────────────────────────────────────────────────────────────
+
+export async function getAthleteRankingStats(trainerId: string): Promise<AthleteRankingStats[]> {
+  const [athletes, checkinMap] = await Promise.all([
+    getAthletes(trainerId),
+    getCheckinCountsByTrainer(trainerId),
+  ])
+  if (athletes.length === 0) return []
+
+  const athleteIds = athletes.map((a) => a.id)
+
+  const { data: sessions } = await supabase
+    .from('sessions')
+    .select('id, athlete_id')
+    .in('athlete_id', athleteIds)
+    .not('completed_at', 'is', null)
+
+  const sessionRows = (sessions ?? []) as { id: string; athlete_id: string }[]
+  const sessionIds = sessionRows.map((s) => s.id)
+
+  const cardioSet = new Set(CARDIO_EXERCISE_NAMES.map((n) => n.toLowerCase()))
+
+  let logs: { session_id: string; reps_done: number; weight_kg: number | null; exercises: { name: string } }[] = []
+  if (sessionIds.length > 0) {
+    const { data } = await supabase
+      .from('set_logs')
+      .select('session_id, reps_done, weight_kg, exercises(name)')
+      .in('session_id', sessionIds)
+      .eq('deleted', false)
+    logs = (data ?? []) as unknown as typeof logs
+  }
+
+  const sessionCountMap: Record<string, number> = {}
+  for (const s of sessionRows) sessionCountMap[s.athlete_id] = (sessionCountMap[s.athlete_id] ?? 0) + 1
+
+  const loadMap: Record<string, number> = {}
+  const cardioMap: Record<string, number> = {}
+  const sessionAthleteMap: Record<string, string> = {}
+  for (const s of sessionRows) sessionAthleteMap[s.id] = s.athlete_id
+
+  for (const log of logs) {
+    const athleteId = sessionAthleteMap[log.session_id]
+    if (!athleteId) continue
+    loadMap[athleteId] = (loadMap[athleteId] ?? 0) + log.reps_done * (log.weight_kg ?? 0)
+    if (cardioSet.has(log.exercises?.name?.toLowerCase())) {
+      cardioMap[athleteId] = (cardioMap[athleteId] ?? 0) + 1
+    }
+  }
+
+  return athletes.map((athlete) => ({
+    athlete,
+    sessions: sessionCountMap[athlete.id] ?? 0,
+    totalLoad: Math.round(loadMap[athlete.id] ?? 0),
+    cardioExercises: cardioMap[athlete.id] ?? 0,
+    checkins: checkinMap[athlete.id] ?? 0,
+  }))
+}
+
+// ─── Badges ───────────────────────────────────────────────────────────────────
+
+export async function getBadgesByAthlete(athleteId: string): Promise<Badge[]> {
+  const { data, error } = await supabase
+    .from('badges')
+    .select('*')
+    .eq('athlete_id', athleteId)
+    .order('created_at', { ascending: false })
+  if (error) return []
+  return data as Badge[]
+}
+
+export async function getBadgesByTrainer(trainerId: string): Promise<Badge[]> {
+  const { data, error } = await supabase
+    .from('badges')
+    .select('*')
+    .eq('trainer_id', trainerId)
+    .order('created_at', { ascending: false })
+  if (error) return []
+  return data as Badge[]
+}
+
+export async function createBadge(
+  trainerId: string,
+  athleteId: string,
+  icon: string,
+  title: string,
+): Promise<Badge | null> {
+  const { data, error } = await supabase
+    .from('badges')
+    .insert({ trainer_id: trainerId, athlete_id: athleteId, icon, title })
+    .select()
+    .single()
+  if (error) { console.error('[createBadge]', error); return null }
+  return data as Badge
+}
+
+export async function deleteBadge(badgeId: string): Promise<boolean> {
+  const { error } = await supabase.from('badges').delete().eq('id', badgeId)
   return !error
 }

@@ -3,12 +3,12 @@ import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { KVLogo, KVButton, KVTag, KVAvatar, KVIcon } from '@/components/ui'
-import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, confirmPayment } from '@/lib/api'
+import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, confirmPayment, updateAthleteProfile, uploadAthleteAvatar, getBadgesByAthlete } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
-import type { Workout, Exercise, SessionWithLogs, Trainer } from '@/types'
+import type { Athlete, Badge, Workout, Exercise, SessionWithLogs, Trainer } from '@/types'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
-type AthleteTab = 'treinos' | 'evolucao'
+type AthleteTab = 'treinos' | 'evolucao' | 'perfil'
 type RestTimer = { remaining: number; total: number }
 
 export default function WorkoutPage() {
@@ -41,15 +41,36 @@ export default function WorkoutPage() {
   const [billingPaid, setBillingPaid] = useState(false)
   const [confirmingPayment, setConfirmingPayment] = useState(false)
 
+  // Perfil
+  const [profileData, setProfileData] = useState<Partial<Pick<Athlete, 'phone' | 'weight_kg' | 'birth_date' | 'height_cm' | 'objective'>>>({})
+  const [profileEditing, setProfileEditing] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [athleteBadges, setAthleteBadges] = useState<Badge[]>([])
+
   useEffect(() => {
     if (!athlete) { setLoading(false); return }
+    setAvatarUrl(athlete.avatar_url ?? null)
+    setProfileData({
+      phone: athlete.phone ?? undefined,
+      weight_kg: athlete.weight_kg ?? undefined,
+      birth_date: athlete.birth_date ?? undefined,
+      height_cm: athlete.height_cm ?? undefined,
+      objective: athlete.objective ?? undefined,
+    })
     async function load() {
       const allWorkouts = await getAthleteWorkouts(athlete!.id)
       const ready = allWorkouts.filter((w) => w.status === 'ready')
       setAvailableWorkouts(ready)
       if (ready.length === 1) await selectWorkout(ready[0])
-      const s = await getAthleteSessions(athlete!.id)
+      const [s, badges] = await Promise.all([
+        getAthleteSessions(athlete!.id),
+        getBadgesByAthlete(athlete!.id),
+      ])
       setSessions(s)
+      setAthleteBadges(badges)
       if (isBillingDue(athlete!)) {
         const t = await getTrainer(athlete!.trainer_id)
         setTrainerForBilling(t)
@@ -235,10 +256,28 @@ export default function WorkoutPage() {
     </div>
   )
 
+  async function handleSaveProfile() {
+    if (!athlete) return
+    setSavingProfile(true)
+    const ok = await updateAthleteProfile(athlete.id, profileData)
+    if (ok) { setProfileSaved(true); setProfileEditing(false); setTimeout(() => setProfileSaved(false), 2500) }
+    setSavingProfile(false)
+  }
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !athlete) return
+    setUploadingAvatar(true)
+    const url = await uploadAthleteAvatar(athlete.id, file)
+    if (url) setAvatarUrl(url)
+    setUploadingAvatar(false)
+  }
+
   // ── Bottom nav ────────────────────────────────────────────────────────────
   const navItems: { key: AthleteTab; label: string; icon: (size: number, color: string) => React.ReactNode }[] = [
     { key: 'treinos', label: 'Treinos', icon: KVIcon.dumbbell },
     { key: 'evolucao', label: 'Evolução', icon: KVIcon.flame },
+    { key: 'perfil', label: 'Perfil', icon: (s, c) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round"/></svg> },
   ]
 
   const bottomNav = (
@@ -318,10 +357,130 @@ export default function WorkoutPage() {
         <button onClick={handleSignOut} style={{ fontSize: 11, color: 'var(--fg-1)', background: 'none', border: '1px solid var(--fg-2)', borderRadius: 999, padding: '4px 12px', cursor: 'pointer', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.06em' }}>
           Sair
         </button>
-        <KVAvatar name={athlete?.name ?? 'A'} size={32} tone="warm"/>
+        <button onClick={() => setTab('perfil')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <KVAvatar name={athlete?.name ?? 'A'} size={32} tone="warm" src={avatarUrl}/>
+        </button>
       </div>
     </div>
   )
+
+  // ── PERFIL TAB ────────────────────────────────────────────────────────────
+  if (tab === 'perfil') {
+    const inp: React.CSSProperties = { width: '100%', height: 44, padding: '0 14px', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 12, fontSize: 14, color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box' }
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', paddingBottom: 100 }}>
+        {pageHeader('Perfil')}
+        {billingBanner}
+        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Avatar */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+            <label style={{ cursor: 'pointer', position: 'relative' }}>
+              <KVAvatar name={athlete?.name ?? 'A'} size={88} tone="warm" src={avatarUrl}/>
+              <div style={{ position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)', border: '2px solid var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {uploadingAvatar
+                  ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" strokeWidth="2"><circle cx="12" cy="12" r="9"/></svg>
+                  : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                }
+              </div>
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} disabled={uploadingAvatar}/>
+            </label>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 18, fontWeight: 600 }}>{athlete?.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>{uploadingAvatar ? 'Enviando foto...' : 'Toque na foto para alterar'}</div>
+            </div>
+          </div>
+
+          {/* Dados */}
+          <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 16, padding: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-2)' }}>Dados pessoais</div>
+              {!profileEditing ? (
+                <button onClick={() => setProfileEditing(true)}
+                  style={{ height: 30, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer' }}>
+                  Editar
+                </button>
+              ) : null}
+            </div>
+
+            {profileEditing ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Telefone</div>
+                  <input type="tel" value={profileData.phone ?? ''} onChange={(e) => setProfileData((p) => ({ ...p, phone: e.target.value || undefined }))} placeholder="(11) 99999-9999" style={inp}/>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Peso (kg)</div>
+                    <input type="number" min="0" step="0.1" value={profileData.weight_kg ?? ''} onChange={(e) => setProfileData((p) => ({ ...p, weight_kg: e.target.value ? parseFloat(e.target.value) : undefined }))} placeholder="70" style={inp}/>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Altura (cm)</div>
+                    <input type="number" min="0" step="1" value={profileData.height_cm ?? ''} onChange={(e) => setProfileData((p) => ({ ...p, height_cm: e.target.value ? parseFloat(e.target.value) : undefined }))} placeholder="170" style={inp}/>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Data de nascimento</div>
+                  <input type="date" value={profileData.birth_date ?? ''} onChange={(e) => setProfileData((p) => ({ ...p, birth_date: e.target.value || undefined }))} style={inp}/>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Objetivo</div>
+                  <textarea value={profileData.objective ?? ''} onChange={(e) => setProfileData((p) => ({ ...p, objective: e.target.value || undefined }))} placeholder="Ex: Perder peso, ganhar massa, melhorar condicionamento..." rows={3}
+                    style={{ ...inp, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5 }}/>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <button onClick={handleSaveProfile} disabled={savingProfile}
+                    style={{ flex: 1, height: 44, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: savingProfile ? 0.6 : 1 }}>
+                    {savingProfile ? 'Salvando...' : 'Salvar'}
+                  </button>
+                  <button onClick={() => setProfileEditing(false)}
+                    style={{ height: 44, padding: '0 16px', borderRadius: 999, background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--ink-4)', fontSize: 14, cursor: 'pointer' }}>
+                    Cancelar
+                  </button>
+                </div>
+                {profileSaved && <div style={{ fontSize: 12, color: 'var(--success)', textAlign: 'center' }}>✓ Dados salvos!</div>}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {[
+                  { label: 'Telefone', value: profileData.phone },
+                  { label: 'Data de nascimento', value: profileData.birth_date ? new Date(profileData.birth_date + 'T12:00:00').toLocaleDateString('pt-BR') : undefined },
+                  { label: 'Peso', value: profileData.weight_kg ? `${profileData.weight_kg} kg` : undefined },
+                  { label: 'Altura', value: profileData.height_cm ? `${profileData.height_cm} cm` : undefined },
+                  { label: 'Objetivo', value: profileData.objective },
+                ].map(({ label, value }) => value ? (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                    <span style={{ fontSize: 13, color: 'var(--fg-3)' }}>{label}</span>
+                    <span style={{ fontSize: 13, color: 'var(--fg-1)', textAlign: 'right', maxWidth: '60%' }}>{value}</span>
+                  </div>
+                ) : null)}
+                {!Object.values(profileData).some(Boolean) && (
+                  <div style={{ fontSize: 13, color: 'var(--fg-4)' }}>Nenhum dado preenchido ainda. Toque em Editar.</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Badges */}
+          {athleteBadges.length > 0 && (
+            <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 16, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-2)', marginBottom: 14 }}>Reconhecimentos</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {athleteBadges.map((b) => (
+                  <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 999, fontSize: 13 }}>
+                    <span style={{ fontSize: 18 }}>{b.icon}</span>
+                    <span style={{ color: 'var(--fg-1)', fontWeight: 500 }}>{b.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+        {bottomNav}
+      </div>
+    )
+  }
 
   // ── EVOLUTION TAB ─────────────────────────────────────────────────────────
   if (tab === 'evolucao') {

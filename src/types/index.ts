@@ -32,6 +32,27 @@ export interface Athlete {
   billing_day: number | null
   billing_amount: number | null
   last_paid_at: string | null
+  birth_date: string | null
+  height_cm: number | null
+  objective: string | null
+  avatar_url: string | null
+}
+
+export interface Badge {
+  id: string
+  trainer_id: string
+  athlete_id: string
+  icon: string
+  title: string
+  created_at: string
+}
+
+export interface AthleteRankingStats {
+  athlete: Athlete
+  sessions: number
+  totalLoad: number
+  cardioExercises: number
+  checkins: number
 }
 
 export interface ClassCheckin {
