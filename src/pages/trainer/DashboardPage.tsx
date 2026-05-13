@@ -66,6 +66,7 @@ export default function DashboardPage() {
   // Athlete detail
   const [selectedAthleteForDetail, setSelectedAthleteForDetail] = useState<Athlete | null>(null)
   const [athleteDetailMainWorkout, setAthleteDetailMainWorkout] = useState<Workout | null>(null)
+  const [athleteDetailOtherWorkouts, setAthleteDetailOtherWorkouts] = useState<Workout[]>([])
   const [athleteDetailExercises, setAthleteDetailExercises] = useState<Exercise[]>([])
   const [athleteParq, setAthleteParq] = useState<ParqResponse | null | undefined>(undefined)
   const [loadingAthleteDetail, setLoadingAthleteDetail] = useState(false)
@@ -207,7 +208,9 @@ export default function DashboardPage() {
     setLoadingAthleteDetail(true)
     const athleteWorkouts = workouts.filter((w) => w.athlete_id === athlete.id)
     const mainWorkout = athleteWorkouts.find((w) => w.status === 'ready') ?? athleteWorkouts[0] ?? null
+    const otherWorkouts = athleteWorkouts.filter((w) => w.id !== mainWorkout?.id)
     setAthleteDetailMainWorkout(mainWorkout)
+    setAthleteDetailOtherWorkouts(otherWorkouts)
     const [exs, parq, checkins] = await Promise.all([
       mainWorkout?.status === 'ready' ? getExercises(mainWorkout.id) : Promise.resolve([]),
       getParqResponse(athlete.id),
@@ -1333,7 +1336,7 @@ export default function DashboardPage() {
         <>
           {/* Current workout */}
           <div style={{ marginBottom: 24 }}>
-            <div className="eyebrow" style={{ marginBottom: 12 }}>Treino atual</div>
+            <div className="eyebrow" style={{ marginBottom: 12 }}>Treinos</div>
             {!athleteDetailMainWorkout ? (
               <Card style={{ padding: '28px 24px', textAlign: 'center' }}>
                 <div style={{ fontSize: 14, color: 'var(--fg-3)', marginBottom: 16 }}>Nenhum treino criado para este aluno ainda.</div>
@@ -1373,6 +1376,22 @@ export default function DashboardPage() {
                 )}
               </Card>
             )}
+            {athleteDetailOtherWorkouts.map((w) => (
+              <Card key={w.id} style={{ padding: 0, overflow: 'hidden', marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--fg-2)' }}>{w.name ?? 'Treino sem nome'}</div>
+                    <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
+                      {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: w.status === 'ready' ? 'var(--success)' : 'var(--fg-4)' }}/>
+                    <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>{w.status === 'ready' ? 'Pronto' : w.status}</span>
+                  </div>
+                </div>
+              </Card>
+            ))}
           </div>
 
           {/* Perfil do atleta */}
