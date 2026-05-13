@@ -1868,9 +1868,9 @@ export default function DashboardPage() {
                 {[1, 0, 2].map((podiumIdx) => {
                   const entry = podium[podiumIdx]
                   if (!entry) return <div key={podiumIdx} style={{ flex: 1, maxWidth: isMobile ? 90 : 120 }}/>
-                  const heights = [96, 128, 76]
-                  const medalColors = ['#C0C0C0', '#FFD700', '#CD7F32']
-                  const medals = ['🥈', '🥇', '🥉']
+                  const heights = [128, 96, 76]
+                  const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32']
+                  const medals = ['🥇', '🥈', '🥉']
                   return (
                     <div key={entry.athlete.id} style={{ flex: 1, maxWidth: isMobile ? 90 : 120, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                       <KVAvatar name={entry.athlete.name} size={podiumIdx === 0 ? 56 : 44} tone="warm" src={entry.athlete.avatar_url}/>
