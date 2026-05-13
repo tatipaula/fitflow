@@ -9,20 +9,21 @@ import {
   updateWorkoutName, deleteWorkout, updateExercise,
   assignWorkoutToAthletes, getParqResponse,
   checkInAthlete, getAthleteCheckins, getCheckinCountsByTrainer, updateAthleteSessionPackage,
-  updateAthleteBilling, updateTrainerPixKey, isBillingDue,
+  updateAthleteBilling, updateTrainerPixKey, updateTrainerProfile, uploadTrainerAvatar, isBillingDue,
   getAthleteRankingStats, getBadgesByTrainer, createBadge, deleteBadge,
 } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
 import { EXERCISE_LIBRARY } from '@/lib/exerciseLibrary'
 import type { Athlete, AthleteRankingStats, Badge, Workout, Exercise, Invite, ParqResponse, ClassCheckin } from '@/types'
 
-type TrainerView = 'home' | 'athletes' | 'workouts' | 'recording' | 'processing' | 'review' | 'sent' | 'athlete-detail' | 'ranking'
+type TrainerView = 'home' | 'athletes' | 'workouts' | 'recording' | 'processing' | 'review' | 'sent' | 'athlete-detail' | 'ranking' | 'trainer-perfil'
 
 const NAV_ITEMS: { key: TrainerView; label: string; icon: (c?: string) => JSX.Element }[] = [
-  { key: 'home',     label: 'Dashboard', icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
-  { key: 'athletes', label: 'Alunos',    icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2" strokeLinecap="round"/><path d="M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.87" strokeLinecap="round"/></svg> },
-  { key: 'workouts', label: 'Treinos',   icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round"><rect x="2" y="9" width="3" height="6" rx="0.5"/><rect x="19" y="9" width="3" height="6" rx="0.5"/><rect x="5" y="10.5" width="2" height="3"/><rect x="17" y="10.5" width="2" height="3"/><path d="M7 12h10"/></svg> },
-  { key: 'ranking',  label: 'Ranking',   icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> },
+  { key: 'home',          label: 'Dashboard', icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
+  { key: 'athletes',      label: 'Alunos',    icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2" strokeLinecap="round"/><path d="M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.87" strokeLinecap="round"/></svg> },
+  { key: 'workouts',      label: 'Treinos',   icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round"><rect x="2" y="9" width="3" height="6" rx="0.5"/><rect x="19" y="9" width="3" height="6" rx="0.5"/><rect x="5" y="10.5" width="2" height="3"/><rect x="17" y="10.5" width="2" height="3"/><path d="M7 12h10"/></svg> },
+  { key: 'ranking',       label: 'Ranking',   icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg> },
+  { key: 'trainer-perfil', label: 'Perfil',   icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round"/></svg> },
 ]
 
 function useIsMobile() {
@@ -117,6 +118,14 @@ export default function DashboardPage() {
   const [rankingCategory, setRankingCategory] = useState<RankingCategory>('sessions')
   const [loadingRanking, setLoadingRanking] = useState(false)
 
+  // Trainer profile
+  const [trainerAvatarUrl, setTrainerAvatarUrl] = useState<string | null>(null)
+  const [trainerProfileData, setTrainerProfileData] = useState<{ name: string; phone: string; bio: string }>({ name: '', phone: '', bio: '' })
+  const [trainerProfileEditing, setTrainerProfileEditing] = useState(false)
+  const [savingTrainerProfile, setSavingTrainerProfile] = useState(false)
+  const [trainerProfileSaved, setTrainerProfileSaved] = useState(false)
+  const [uploadingTrainerAvatar, setUploadingTrainerAvatar] = useState(false)
+
   // Badges
   const [trainerBadges, setTrainerBadges] = useState<Badge[]>([])
   const [showBadgeModal, setShowBadgeModal] = useState<string | null>(null) // athleteId
@@ -144,6 +153,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!trainer) { setLoadingData(false); return }
     setTrainerPixKey(trainer.pix_key ?? null)
+    setTrainerAvatarUrl(trainer.avatar_url ?? null)
+    setTrainerProfileData({ name: trainer.name ?? '', phone: trainer.phone ?? '', bio: trainer.bio ?? '' })
     Promise.all([getAthletes(trainer.id), getWorkouts(trainer.id), getCheckinCountsByTrainer(trainer.id), getBadgesByTrainer(trainer.id)])
       .then(([a, w, counts, badges]) => { setAthletes(a); setWorkouts(w); setCheckinCounts(counts); setTrainerBadges(badges) })
       .catch(console.error)
@@ -398,6 +409,26 @@ export default function DashboardPage() {
     setPixKeyEdit(false)
   }
 
+  async function handleSaveTrainerProfile() {
+    setSavingTrainerProfile(true)
+    const ok = await updateTrainerProfile({
+      name: trainerProfileData.name.trim() || undefined,
+      phone: trainerProfileData.phone.trim() || undefined,
+      bio: trainerProfileData.bio.trim() || undefined,
+    })
+    if (ok) { setTrainerProfileSaved(true); setTrainerProfileEditing(false); setTimeout(() => setTrainerProfileSaved(false), 2500) }
+    setSavingTrainerProfile(false)
+  }
+
+  async function handleTrainerAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !trainer) return
+    setUploadingTrainerAvatar(true)
+    const url = await uploadTrainerAvatar(trainer.id, file)
+    if (url) setTrainerAvatarUrl(url)
+    setUploadingTrainerAvatar(false)
+  }
+
   async function handleLoadRanking() {
     if (!trainer) return
     setLoadingRanking(true)
@@ -579,7 +610,7 @@ export default function DashboardPage() {
               const adh = aw.length > 0 ? Math.min(1, aw.filter((w) => w.status === 'ready').length / Math.max(aw.length, 1)) : 0
               return (
                 <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: i < Math.min(athletes.length, 4) - 1 ? '1px solid var(--ink-4)' : 'none' }}>
-                  <KVAvatar name={a.name} size={36} tone="warm"/>
+                  <KVAvatar name={a.name} size={36} tone="warm" src={a.avatar_url}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
                     <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{aw.length > 0 ? `${aw.length} treinos` : 'Sem sessões'}</div>
@@ -873,7 +904,7 @@ export default function DashboardPage() {
                   </div>
                 )}
                 <button onClick={() => handleToggleWorkout(w)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'none', border: 'none', color: 'var(--fg-1)', cursor: 'pointer', textAlign: 'left' }}>
-                  <KVAvatar name={athlete?.name ?? '?'} size={38}/>
+                  <KVAvatar name={athlete?.name ?? '?'} size={38} src={athlete?.avatar_url}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{athlete?.name ?? '—'}</div>
                     <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1286,11 +1317,6 @@ export default function DashboardPage() {
         <KVAvatar name={selectedAthleteForDetail.name} size={52} tone="warm" src={selectedAthleteForDetail.avatar_url}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="display" style={{ fontSize: isMobile ? 24 : 30 }}>{selectedAthleteForDetail.name}</div>
-          {(selectedAthleteForDetail.email || selectedAthleteForDetail.phone) && (
-            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>
-              {selectedAthleteForDetail.email ?? selectedAthleteForDetail.phone}
-            </div>
-          )}
           {selectedAthleteForDetail.objective && (
             <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4, fontStyle: 'italic' }}>{selectedAthleteForDetail.objective}</div>
           )}
@@ -1612,7 +1638,7 @@ export default function DashboardPage() {
                 <input type="checkbox" checked={assignChecked.includes(a.id)}
                   onChange={(e) => setAssignChecked((p) => e.target.checked ? [...p, a.id] : p.filter((id) => id !== a.id))}
                   style={{ width: 16, height: 16, accentColor: 'var(--accent)', flexShrink: 0 }}/>
-                <KVAvatar name={a.name} size={32} tone="warm"/>
+                <KVAvatar name={a.name} size={32} tone="warm" src={a.avatar_url}/>
                 <span style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</span>
               </label>
             ))}
@@ -1674,6 +1700,120 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+    </div>
+  )
+
+  // ── TRAINER PERFIL VIEW ───────────────────────────────────────────────────
+  const inpStyle: React.CSSProperties = { width: '100%', height: 44, padding: '0 14px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 12, fontSize: 14, color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box' }
+
+  const trainerPerfilView = (
+    <div style={contentStyle}>
+      <div style={{ marginBottom: 24 }}>
+        <div className="display" style={{ fontSize: isMobile ? 30 : 36 }}>Meu Perfil</div>
+      </div>
+
+      {/* PIX KEY — destaque */}
+      <Card style={{ padding: 20, marginBottom: 16, borderColor: 'var(--accent)' }}>
+        <div className="eyebrow" style={{ color: 'var(--accent)', marginBottom: 10 }}>Chave PIX para cobranças</div>
+        {pixKeyEdit ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input autoFocus value={pixKeyValue} onChange={(e) => setPixKeyValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSavePixKey(); if (e.key === 'Escape') setPixKeyEdit(false) }}
+              placeholder="Chave PIX (CPF, e-mail, telefone ou chave aleatória)"
+              style={{ ...inpStyle, flex: 1 }}/>
+            <button onClick={handleSavePixKey} style={{ height: 44, padding: '0 16px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
+            <button onClick={() => setPixKeyEdit(false)} style={{ height: 44, padding: '0 12px', borderRadius: 999, background: 'transparent', color: 'var(--fg-3)', border: '1px solid var(--ink-4)', fontSize: 13, cursor: 'pointer' }}>✕</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace", fontSize: 14, color: trainerPixKey ? 'var(--fg-1)' : 'var(--fg-4)', wordBreak: 'break-all' }}>
+              {trainerPixKey ?? 'Não configurada — alunos não receberão a chave nas notificações'}
+            </div>
+            <button onClick={() => { setPixKeyEdit(true); setPixKeyValue(trainerPixKey ?? '') }}
+              style={{ height: 36, padding: '0 14px', borderRadius: 999, background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: 12, fontWeight: 500, cursor: 'pointer', flexShrink: 0 }}>
+              {trainerPixKey ? 'Editar' : 'Configurar'}
+            </button>
+          </div>
+        )}
+      </Card>
+
+      {/* PROFILE CARD */}
+      <Card style={{ padding: 20 }}>
+        {/* Avatar */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingBottom: 20, marginBottom: 20, borderBottom: '1px solid var(--ink-4)' }}>
+          <label style={{ cursor: 'pointer', position: 'relative' }}>
+            <KVAvatar name={trainerProfileData.name || trainer?.name || 'T'} size={88} tone="accent" src={trainerAvatarUrl}/>
+            <div style={{ position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)', border: '2px solid var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {uploadingTrainerAvatar
+                ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" strokeWidth="2"><circle cx="12" cy="12" r="9"/></svg>
+                : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              }
+            </div>
+            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleTrainerAvatarChange} disabled={uploadingTrainerAvatar}/>
+          </label>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>{trainerProfileData.name || trainer?.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>{trainer?.email}</div>
+            <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 2 }}>{uploadingTrainerAvatar ? 'Enviando foto...' : 'Toque na foto para alterar'}</div>
+          </div>
+        </div>
+
+        {/* Editable fields */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-2)' }}>Dados do personal</div>
+          {!trainerProfileEditing && (
+            <button onClick={() => setTrainerProfileEditing(true)}
+              style={{ height: 30, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer' }}>
+              Editar
+            </button>
+          )}
+        </div>
+
+        {trainerProfileEditing ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Nome</div>
+              <input type="text" value={trainerProfileData.name} onChange={(e) => setTrainerProfileData((p) => ({ ...p, name: e.target.value }))} placeholder={trainer?.name} style={inpStyle}/>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Telefone / WhatsApp</div>
+              <input type="tel" value={trainerProfileData.phone} onChange={(e) => setTrainerProfileData((p) => ({ ...p, phone: e.target.value }))} placeholder="(11) 99999-9999" style={inpStyle}/>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Bio / Apresentação</div>
+              <textarea value={trainerProfileData.bio} onChange={(e) => setTrainerProfileData((p) => ({ ...p, bio: e.target.value }))} placeholder="Ex: Personal trainer especializado em hipertrofia e emagrecimento..." rows={4}
+                style={{ ...inpStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5 }}/>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button onClick={handleSaveTrainerProfile} disabled={savingTrainerProfile}
+                style={{ flex: 1, height: 44, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: savingTrainerProfile ? 0.6 : 1 }}>
+                {savingTrainerProfile ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button onClick={() => setTrainerProfileEditing(false)}
+                style={{ height: 44, padding: '0 16px', borderRadius: 999, background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--ink-4)', fontSize: 14, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+            </div>
+            {trainerProfileSaved && <div style={{ fontSize: 12, color: 'var(--success)', textAlign: 'center' }}>✓ Dados salvos!</div>}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[
+              { label: 'E-mail', value: trainer?.email },
+              { label: 'Telefone', value: trainerProfileData.phone || null },
+              { label: 'Bio', value: trainerProfileData.bio || null },
+            ].map(({ label, value }) => value ? (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                <span style={{ fontSize: 13, color: 'var(--fg-3)', flexShrink: 0 }}>{label}</span>
+                <span style={{ fontSize: 13, color: 'var(--fg-1)', textAlign: 'right', maxWidth: '65%', lineHeight: 1.5 }}>{value}</span>
+              </div>
+            ) : null)}
+            {!trainerProfileData.phone && !trainerProfileData.bio && (
+              <div style={{ fontSize: 13, color: 'var(--fg-4)' }}>Nenhum dado preenchido. Toque em Editar.</div>
+            )}
+          </div>
+        )}
+      </Card>
     </div>
   )
 
@@ -1858,6 +1998,7 @@ export default function DashboardPage() {
         {view === 'review'        && reviewView}
         {view === 'sent'          && sentView}
         {view === 'ranking'       && rankingView}
+        {view === 'trainer-perfil' && trainerPerfilView}
       </div>
       {mobileBottomNav}
       {assignModal}

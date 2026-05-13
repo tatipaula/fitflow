@@ -6,6 +6,7 @@
 
 import type {
   Athlete,
+  AthleteRankingPosition,
   AthleteRankingStats,
   Badge,
   ClassCheckin,
@@ -570,6 +571,48 @@ export async function updateTrainerPixKey(pixKey: string): Promise<boolean> {
     .update({ pix_key: pixKey || null })
     .eq('id', session.user.id)
   return !error
+}
+
+export async function updateTrainerProfile(
+  data: Partial<Pick<import('@/types').Trainer, 'name' | 'phone' | 'bio' | 'avatar_url'>>,
+): Promise<boolean> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return false
+  const { error } = await supabase.from('trainers').update(data).eq('id', session.user.id)
+  return !error
+}
+
+export async function uploadTrainerAvatar(trainerId: string, file: File): Promise<string | null> {
+  const ext = file.name.split('.').pop() ?? 'jpg'
+  const path = `${trainerId}/avatar.${ext}`
+  const { error } = await supabase.storage.from('trainer-avatars').upload(path, file, { upsert: true })
+  if (error) { console.error('[uploadTrainerAvatar]', error); return null }
+  const { data } = supabase.storage.from('trainer-avatars').getPublicUrl(path)
+  const url = `${data.publicUrl}?t=${Date.now()}`
+  await updateTrainerProfile({ avatar_url: url })
+  return url
+}
+
+export async function getAthleteRankingPosition(
+  trainerId: string,
+  athleteId: string,
+): Promise<AthleteRankingPosition | null> {
+  const { data, error } = await supabase.rpc('get_athlete_ranking_position', {
+    p_trainer_id: trainerId,
+    p_athlete_id: athleteId,
+  })
+  if (error) { console.error('[getAthleteRankingPosition]', error); return null }
+  return {
+    sessionsRank: Number(data.sessions_rank),
+    sessionsValue: Number(data.sessions_value),
+    loadRank: Number(data.load_rank),
+    loadValue: Number(data.load_value),
+    cardioRank: Number(data.cardio_rank),
+    cardioValue: Number(data.cardio_value),
+    checkinsRank: Number(data.checkins_rank),
+    checkinsValue: Number(data.checkins_value),
+    totalAthletes: Number(data.total_athletes),
+  }
 }
 
 // ─── Athlete profile ──────────────────────────────────────────────────────────

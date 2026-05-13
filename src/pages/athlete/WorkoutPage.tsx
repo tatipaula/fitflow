@@ -3,9 +3,9 @@ import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { KVLogo, KVButton, KVTag, KVAvatar, KVIcon } from '@/components/ui'
-import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, confirmPayment, updateAthleteProfile, uploadAthleteAvatar, getBadgesByAthlete } from '@/lib/api'
+import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, confirmPayment, updateAthleteProfile, uploadAthleteAvatar, getBadgesByAthlete, getAthleteRankingPosition } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
-import type { Athlete, Badge, Workout, Exercise, SessionWithLogs, Trainer } from '@/types'
+import type { Athlete, AthleteRankingPosition, Badge, Workout, Exercise, SessionWithLogs, Trainer } from '@/types'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 type AthleteTab = 'treinos' | 'evolucao' | 'perfil'
@@ -49,6 +49,7 @@ export default function WorkoutPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [athleteBadges, setAthleteBadges] = useState<Badge[]>([])
+  const [rankingPosition, setRankingPosition] = useState<AthleteRankingPosition | null>(null)
 
   useEffect(() => {
     if (!athlete) { setLoading(false); return }
@@ -65,12 +66,14 @@ export default function WorkoutPage() {
       const ready = allWorkouts.filter((w) => w.status === 'ready')
       setAvailableWorkouts(ready)
       if (ready.length === 1) await selectWorkout(ready[0])
-      const [s, badges] = await Promise.all([
+      const [s, badges, rankPos] = await Promise.all([
         getAthleteSessions(athlete!.id),
         getBadgesByAthlete(athlete!.id),
+        getAthleteRankingPosition(athlete!.trainer_id, athlete!.id),
       ])
       setSessions(s)
       setAthleteBadges(badges)
+      setRankingPosition(rankPos)
       if (isBillingDue(athlete!)) {
         const t = await getTrainer(athlete!.trainer_id)
         setTrainerForBilling(t)
@@ -460,6 +463,34 @@ export default function WorkoutPage() {
               </div>
             )}
           </div>
+
+          {/* Ranking position */}
+          {rankingPosition && rankingPosition.totalAthletes > 1 && (
+            <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 16, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-2)', marginBottom: 14 }}>Posição no ranking</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[
+                  { label: 'Treinos', rank: rankingPosition.sessionsRank, value: rankingPosition.sessionsValue, unit: 'treinos' },
+                  { label: 'Carga Total', rank: rankingPosition.loadRank, value: Math.round(rankingPosition.loadValue), unit: 'kg' },
+                  { label: 'Cardio', rank: rankingPosition.cardioRank, value: rankingPosition.cardioValue, unit: 'exerc.' },
+                  { label: 'Check-ins', rank: rankingPosition.checkinsRank, value: rankingPosition.checkinsValue, unit: 'aulas' },
+                ].map(({ label, rank, value, unit }) => {
+                  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
+                  return (
+                    <div key={label} style={{ background: 'var(--ink-3)', border: `1px solid ${rank <= 3 ? 'var(--accent)' : 'var(--ink-4)'}`, borderRadius: 12, padding: '14px 14px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ fontSize: 10, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                        {medal && <span style={{ fontSize: 16 }}>{medal}</span>}
+                        <span className="num" style={{ fontSize: 22, color: rank <= 3 ? 'var(--accent)' : 'var(--fg-1)', lineHeight: 1 }}>#{rank}</span>
+                        <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>/{rankingPosition.totalAthletes}</span>
+                      </div>
+                      <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{value} {unit}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Badges */}
           {athleteBadges.length > 0 && (

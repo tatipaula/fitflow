@@ -12,10 +12,25 @@ export interface Trainer {
   id: string
   email: string
   name: string
+  phone: string | null
+  bio: string | null
+  avatar_url: string | null
   stripe_customer_id: string | null
   plan: UserPlan
   pix_key: string | null
   created_at: string
+}
+
+export interface AthleteRankingPosition {
+  sessionsRank: number
+  sessionsValue: number
+  loadRank: number
+  loadValue: number
+  cardioRank: number
+  cardioValue: number
+  checkinsRank: number
+  checkinsValue: number
+  totalAthletes: number
 }
 
 export interface Athlete {
