@@ -3,9 +3,9 @@ import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { KVLogo, KVButton, KVTag, KVAvatar, KVIcon } from '@/components/ui'
-import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions } from '@/lib/api'
+import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, confirmPayment } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
-import type { Workout, Exercise, SessionWithLogs } from '@/types'
+import type { Workout, Exercise, SessionWithLogs, Trainer } from '@/types'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 type AthleteTab = 'treinos' | 'evolucao'
@@ -37,6 +37,10 @@ export default function WorkoutPage() {
   const [tab, setTab] = useState<AthleteTab>('treinos')
   const [sessions, setSessions] = useState<SessionWithLogs[]>([])
 
+  const [trainerForBilling, setTrainerForBilling] = useState<Trainer | null>(null)
+  const [billingPaid, setBillingPaid] = useState(false)
+  const [confirmingPayment, setConfirmingPayment] = useState(false)
+
   useEffect(() => {
     if (!athlete) { setLoading(false); return }
     async function load() {
@@ -46,6 +50,10 @@ export default function WorkoutPage() {
       if (ready.length === 1) await selectWorkout(ready[0])
       const s = await getAthleteSessions(athlete!.id)
       setSessions(s)
+      if (isBillingDue(athlete!)) {
+        const t = await getTrainer(athlete!.trainer_id)
+        setTrainerForBilling(t)
+      }
       setLoading(false)
     }
     load()
@@ -261,6 +269,39 @@ export default function WorkoutPage() {
     </div>
   )
 
+  // ── Billing ───────────────────────────────────────────────────────────────
+  async function handleConfirmPayment() {
+    if (!athlete) return
+    setConfirmingPayment(true)
+    const ok = await confirmPayment(athlete.id)
+    if (ok) setBillingPaid(true)
+    setConfirmingPayment(false)
+  }
+
+  const billingBanner = !billingPaid && athlete && isBillingDue(athlete) && (
+    <div style={{ margin: '0 20px 16px', padding: '16px 18px', background: 'var(--ink-2)', border: '1px solid var(--accent)', borderRadius: 'var(--r-lg)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 6, color: 'var(--accent)' }}>Mensalidade</div>
+          {athlete.billing_amount && (
+            <div className="num" style={{ fontSize: 28, color: 'var(--accent)', lineHeight: 1 }}>
+              R$ {Number(athlete.billing_amount).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+            </div>
+          )}
+          {trainerForBilling?.pix_key && (
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 6, fontFamily: "'JetBrains Mono', monospace", wordBreak: 'break-all' }}>
+              Pix: {trainerForBilling.pix_key}
+            </div>
+          )}
+        </div>
+        <button onClick={handleConfirmPayment} disabled={confirmingPayment}
+          style={{ height: 40, padding: '0 20px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0, opacity: confirmingPayment ? 0.6 : 1 }}>
+          {confirmingPayment ? '...' : 'Paguei ✓'}
+        </button>
+      </div>
+    </div>
+  )
+
   // ── Header ────────────────────────────────────────────────────────────────
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -287,6 +328,7 @@ export default function WorkoutPage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--ink-0)', paddingBottom: 90 }}>
         {pageHeader('Evolução')}
+        {billingBanner}
 
         {sessions.length === 0 ? (
           <div style={{ padding: '80px 24px', textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
@@ -367,6 +409,7 @@ export default function WorkoutPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--ink-0)', paddingBottom: 90 }}>
       {pageHeader('Treinos')}
+      {billingBanner}
 
       {!workout ? (
         availableWorkouts.length === 0 ? (

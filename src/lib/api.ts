@@ -6,6 +6,7 @@
 
 import type {
   Athlete,
+  ClassCheckin,
   CreateAthleteInput,
   CreateWorkoutInput,
   Exercise,
@@ -479,4 +480,91 @@ export async function getSetLogs(sessionId: string): Promise<SetLog[]> {
     .order('completed_at')
   if (error) return []
   return data as SetLog[]
+}
+
+// ─── Class check-ins ──────────────────────────────────────────────────────────
+
+export async function checkInAthlete(athleteId: string): Promise<ClassCheckin | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+  const { data, error } = await supabase
+    .from('class_checkins')
+    .insert({ trainer_id: session.user.id, athlete_id: athleteId })
+    .select()
+    .single()
+  if (error) { console.error('[checkInAthlete]', error); return null }
+  return data as ClassCheckin
+}
+
+export async function getAthleteCheckins(athleteId: string): Promise<ClassCheckin[]> {
+  const { data, error } = await supabase
+    .from('class_checkins')
+    .select('*')
+    .eq('athlete_id', athleteId)
+    .order('checked_at', { ascending: false })
+  if (error) return []
+  return data as ClassCheckin[]
+}
+
+export async function getCheckinCountsByTrainer(trainerId: string): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('class_checkins')
+    .select('athlete_id')
+    .eq('trainer_id', trainerId)
+  if (error || !data) return {}
+  const counts: Record<string, number> = {}
+  for (const row of data as { athlete_id: string }[]) {
+    counts[row.athlete_id] = (counts[row.athlete_id] ?? 0) + 1
+  }
+  return counts
+}
+
+export async function updateAthleteSessionPackage(athleteId: string, sessionsTotal: number): Promise<boolean> {
+  const { error } = await supabase
+    .from('athletes')
+    .update({ sessions_total: sessionsTotal })
+    .eq('id', athleteId)
+  return !error
+}
+
+// ─── Billing ──────────────────────────────────────────────────────────────────
+
+export function isBillingDue(athlete: Athlete): boolean {
+  if (!athlete.billing_day || !athlete.billing_amount) return false
+  const today = new Date()
+  if (today.getDate() < athlete.billing_day) return false
+  if (!athlete.last_paid_at) return true
+  const [paidYear, paidMonth] = athlete.last_paid_at.split('-').map(Number)
+  return paidYear < today.getFullYear() || paidMonth < today.getMonth() + 1
+}
+
+export async function confirmPayment(athleteId: string): Promise<boolean> {
+  const today = new Date().toISOString().split('T')[0]
+  const { error } = await supabase
+    .from('athletes')
+    .update({ last_paid_at: today })
+    .eq('id', athleteId)
+  return !error
+}
+
+export async function updateAthleteBilling(
+  athleteId: string,
+  billingDay: number | null,
+  billingAmount: number | null,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('athletes')
+    .update({ billing_day: billingDay, billing_amount: billingAmount })
+    .eq('id', athleteId)
+  return !error
+}
+
+export async function updateTrainerPixKey(pixKey: string): Promise<boolean> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return false
+  const { error } = await supabase
+    .from('trainers')
+    .update({ pix_key: pixKey || null })
+    .eq('id', session.user.id)
+  return !error
 }

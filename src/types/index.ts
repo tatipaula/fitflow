@@ -14,6 +14,7 @@ export interface Trainer {
   name: string
   stripe_customer_id: string | null
   plan: UserPlan
+  pix_key: string | null
   created_at: string
 }
 
@@ -27,6 +28,19 @@ export interface Athlete {
   invite_token: string
   created_at: string
   auth_user_id: string | null
+  sessions_total: number
+  billing_day: number | null
+  billing_amount: number | null
+  last_paid_at: string | null
+}
+
+export interface ClassCheckin {
+  id: string
+  trainer_id: string
+  athlete_id: string
+  checked_at: string
+  notes: string | null
+  created_at: string
 }
 
 export interface Invite {

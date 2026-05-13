@@ -32,6 +32,9 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Chaves e secrets locais
+_keys/
+
 # Supabase local
 supabase/.branches/
 supabase/.temp/

@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { linkAthleteAccount, linkAthleteByInviteToken, saveParqResponse } from '@/lib/api'
+import { registerPush } from '@/lib/push'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import LoginPage from '@/pages/auth/LoginPage'
 import InvitePage from '@/pages/invite/InvitePage'
@@ -40,6 +41,7 @@ export default function App() {
           }
 
           initAuth(session.user.id)
+          registerPush()
         }, 0)
       } else {
         clearAuth()

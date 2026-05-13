@@ -7,6 +7,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       includeAssets: [
         'favicon.ico',
         'apple-touch-icon-180x180.png',
@@ -46,51 +49,8 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
-        // Cache todos os assets estáticos gerados pelo Vite
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          // Google Fonts — CacheFirst, expira em 1 ano
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'kv-google-fonts',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'kv-gstatic-fonts',
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          // YouTube thumbnails — CacheFirst, 7 dias
-          {
-            urlPattern: /^https:\/\/i\.ytimg\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'kv-yt-thumbs',
-              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          // Supabase REST/Storage — NetworkFirst (dados sempre frescos)
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'kv-supabase',
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
-              cacheableResponse: { statuses: [0, 200] },
-              networkTimeoutSeconds: 10,
-            },
-          },
-        ],
       },
     }),
   ],

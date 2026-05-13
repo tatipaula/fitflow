@@ -8,9 +8,12 @@ import {
   processWorkoutAudio, processWorkoutText, getExercises,
   updateWorkoutName, deleteWorkout, updateExercise,
   assignWorkoutToAthletes, getParqResponse,
+  checkInAthlete, getAthleteCheckins, getCheckinCountsByTrainer, updateAthleteSessionPackage,
+  updateAthleteBilling, updateTrainerPixKey, isBillingDue,
 } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
-import type { Athlete, Workout, Exercise, Invite, ParqResponse } from '@/types'
+import { EXERCISE_LIBRARY } from '@/lib/exerciseLibrary'
+import type { Athlete, Workout, Exercise, Invite, ParqResponse, ClassCheckin } from '@/types'
 
 type TrainerView = 'home' | 'athletes' | 'workouts' | 'recording' | 'processing' | 'review' | 'sent' | 'athlete-detail'
 
@@ -64,6 +67,14 @@ export default function DashboardPage() {
   const [athleteParq, setAthleteParq] = useState<ParqResponse | null | undefined>(undefined)
   const [loadingAthleteDetail, setLoadingAthleteDetail] = useState(false)
 
+  // Check-in
+  const [checkinCounts, setCheckinCounts] = useState<Record<string, number>>({})
+  const [checkingInId, setCheckingInId] = useState<string | null>(null)
+  const [checkInSuccess, setCheckInSuccess] = useState<string | null>(null)
+  const [athleteCheckins, setAthleteCheckins] = useState<ClassCheckin[]>([])
+  const [packageEditId, setPackageEditId] = useState<string | null>(null)
+  const [packageEditValue, setPackageEditValue] = useState('')
+
   // Assign workout modal
   const [assignModalWorkoutId, setAssignModalWorkoutId] = useState<string | null>(null)
   const [assignChecked, setAssignChecked] = useState<string[]>([])
@@ -88,6 +99,20 @@ export default function DashboardPage() {
   )
   const [detectedExercises, setDetectedExercises] = useState<Exercise[]>([])
 
+  // Billing per athlete
+  const [billingEditId, setBillingEditId] = useState<string | null>(null)
+  const [billingDay, setBillingDay] = useState('')
+  const [billingAmount, setBillingAmount] = useState('')
+
+  // Trainer Pix key
+  const [pixKeyEdit, setPixKeyEdit] = useState(false)
+  const [pixKeyValue, setPixKeyValue] = useState('')
+  const [trainerPixKey, setTrainerPixKey] = useState<string | null>(null)
+
+  // Exercise library
+  const [showLibrary, setShowLibrary] = useState(false)
+  const [libraryGroup, setLibraryGroup] = useState('peito')
+
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null)
   const [exercises, setExercises] = useState<Record<string, Exercise[]>>({})
   const [loadingExercises, setLoadingExercises] = useState(false)
@@ -102,8 +127,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!trainer) { setLoadingData(false); return }
-    Promise.all([getAthletes(trainer.id), getWorkouts(trainer.id)])
-      .then(([a, w]) => { setAthletes(a); setWorkouts(w) })
+    setTrainerPixKey(trainer.pix_key ?? null)
+    Promise.all([getAthletes(trainer.id), getWorkouts(trainer.id), getCheckinCountsByTrainer(trainer.id)])
+      .then(([a, w, counts]) => { setAthletes(a); setWorkouts(w); setCheckinCounts(counts) })
       .catch(console.error)
       .finally(() => setLoadingData(false))
   }, [trainer])
@@ -155,12 +181,14 @@ export default function DashboardPage() {
     const athleteWorkouts = workouts.filter((w) => w.athlete_id === athlete.id)
     const mainWorkout = athleteWorkouts.find((w) => w.status === 'ready') ?? athleteWorkouts[0] ?? null
     setAthleteDetailMainWorkout(mainWorkout)
-    const [exs, parq] = await Promise.all([
+    const [exs, parq, checkins] = await Promise.all([
       mainWorkout?.status === 'ready' ? getExercises(mainWorkout.id) : Promise.resolve([]),
       getParqResponse(athlete.id),
+      getAthleteCheckins(athlete.id),
     ])
     setAthleteDetailExercises(exs)
     setAthleteParq(parq)
+    setAthleteCheckins(checkins)
     setLoadingAthleteDetail(false)
   }
 
@@ -314,8 +342,55 @@ export default function DashboardPage() {
     setView('sent')
   }
 
+  function handleAddFromLibrary(name: string, sets: number, reps: number, rest: number, timed: boolean) {
+    const repsStr = timed ? `${reps}s` : String(reps)
+    const line = `${name} ${sets}×${repsStr} descanso ${rest}s`
+    setWorkoutText((p) => p.trim() ? `${p.trim()}\n${line}` : line)
+  }
+
   function copyInviteLink(a: Athlete) { navigator.clipboard.writeText(`${window.location.origin}/invite/${a.invite_token}`) }
   function copyConviteLink(token: string) { navigator.clipboard.writeText(`${window.location.origin}/convite/${token}`) }
+
+  async function handleCheckIn(athleteId: string) {
+    setCheckingInId(athleteId)
+    const checkin = await checkInAthlete(athleteId)
+    if (checkin) {
+      setCheckinCounts((p) => ({ ...p, [athleteId]: (p[athleteId] ?? 0) + 1 }))
+      if (selectedAthleteForDetail?.id === athleteId) {
+        setAthleteCheckins((p) => [checkin, ...p])
+      }
+      setCheckInSuccess(athleteId)
+      setTimeout(() => setCheckInSuccess(null), 2000)
+    }
+    setCheckingInId(null)
+  }
+
+  async function handleSaveBilling(athleteId: string) {
+    const day = parseInt(billingDay) || null
+    const amount = parseFloat(billingAmount) || null
+    const ok = await updateAthleteBilling(athleteId, day, amount)
+    if (ok) {
+      setAthletes((p) => p.map((a) => a.id === athleteId ? { ...a, billing_day: day, billing_amount: amount } : a))
+      setSelectedAthleteForDetail((p) => p ? (p.id === athleteId ? { ...p, billing_day: day, billing_amount: amount } : p) : null)
+    }
+    setBillingEditId(null)
+  }
+
+  async function handleSavePixKey() {
+    const ok = await updateTrainerPixKey(pixKeyValue.trim())
+    if (ok) setTrainerPixKey(pixKeyValue.trim() || null)
+    setPixKeyEdit(false)
+  }
+
+  async function handleSavePackage(athleteId: string) {
+    const total = parseInt(packageEditValue) || 0
+    const ok = await updateAthleteSessionPackage(athleteId, total)
+    if (ok) {
+      setAthletes((p) => p.map((a) => a.id === athleteId ? { ...a, sessions_total: total } : a))
+      setSelectedAthleteForDetail((p) => p ? (p.id === athleteId ? { ...p, sessions_total: total } : p) : null)
+    }
+    setPackageEditId(null)
+  }
 
   const recMin = String(Math.floor(recordingSeconds / 60)).padStart(2, '0')
   const recSec = String(recordingSeconds % 60).padStart(2, '0')
@@ -331,6 +406,8 @@ export default function DashboardPage() {
 
   // ── Layout shell ──────────────────────────────────────────────────────────
   const inp: React.CSSProperties = { width: '100%', height: 44, padding: '0 14px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none' }
+
+  const pendingBillingCount = athletes.filter(isBillingDue).length
 
   // ── Sidebar (desktop) ─────────────────────────────────────────────────────
   const sidebar = !isMobile && (
@@ -351,6 +428,17 @@ export default function DashboardPage() {
         })}
       </div>
       <div style={{ padding: '16px 0 8px', borderTop: '1px solid var(--ink-4)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button onClick={() => setView('athletes')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-md)', background: 'transparent', border: 'none', cursor: 'pointer', color: pendingBillingCount > 0 ? 'var(--accent)' : 'var(--fg-3)', fontSize: 13, width: '100%', textAlign: 'left' }}>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            {pendingBillingCount > 0 && (
+              <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 15, height: 15, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
+                {pendingBillingCount}
+              </span>
+            )}
+          </div>
+          Cobranças{pendingBillingCount > 0 ? ` (${pendingBillingCount})` : ''}
+        </button>
         <button onClick={() => setView('recording')}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}>
           {KVIcon.mic(16, 'var(--accent-ink)')} Novo Treino
@@ -363,10 +451,22 @@ export default function DashboardPage() {
   )
 
   // ── Mobile header ─────────────────────────────────────────────────────────
+  const bellButton = (
+    <button onClick={() => setView('athletes')} style={{ position: 'relative', width: 38, height: 38, borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fg-2)" strokeWidth="1.5" strokeLinecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      {pendingBillingCount > 0 && (
+        <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontFamily: "'JetBrains Mono', monospace" }}>
+          {pendingBillingCount}
+        </span>
+      )}
+    </button>
+  )
+
   const mobileHeader = isMobile && (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--ink-4)', background: 'var(--ink-1)', position: 'sticky', top: 0, zIndex: 40 }}>
       <KVWordmark size={14}/>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {bellButton}
         <button onClick={() => setView('recording')}
           style={{ display: 'flex', alignItems: 'center', gap: 6, height: 38, padding: '0 14px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
           {KVIcon.mic(14, 'var(--accent-ink)')} Novo Treino
@@ -467,6 +567,38 @@ export default function DashboardPage() {
           </button>
         </Card>
       </div>
+
+      {/* Pix key */}
+      <Card style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Chave Pix para cobranças</div>
+            {pixKeyEdit ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input autoFocus value={pixKeyValue} onChange={(e) => setPixKeyValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSavePixKey(); if (e.key === 'Escape') setPixKeyEdit(false) }}
+                  placeholder="CPF, telefone, e-mail ou chave aleatória"
+                  style={{ flex: 1, height: 36, padding: '0 12px', background: 'var(--ink-1)', border: '1px solid var(--accent)', borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none' }}/>
+                <button onClick={handleSavePixKey} style={{ height: 36, padding: '0 14px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
+                <button onClick={() => setPixKeyEdit(false)} style={{ height: 36, padding: '0 10px', borderRadius: 999, background: 'transparent', color: 'var(--fg-3)', border: '1px solid var(--ink-4)', fontSize: 12, cursor: 'pointer' }}>✕</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 14, color: trainerPixKey ? 'var(--fg-1)' : 'var(--fg-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {trainerPixKey ?? 'Não configurada — alunos não receberão a chave nas notificações'}
+                </span>
+                <button onClick={() => { setPixKeyEdit(true); setPixKeyValue(trainerPixKey ?? '') }}
+                  style={{ height: 30, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>
+                  {trainerPixKey ? 'Editar' : 'Configurar'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
     </div>
   )
 
@@ -596,9 +728,59 @@ export default function DashboardPage() {
                     <span className="num" style={{ fontSize: 12, color: 'var(--fg-2)', flexShrink: 0 }}>{Math.round(adh * 100)}%</span>
                   </div>
                 )}
-                <button onClick={() => copyInviteLink(a)} style={{ marginTop: 14, width: '100%', height: 36, borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer' }}>
-                  Copiar link de convite
-                </button>
+                {a.billing_day && a.billing_amount ? (() => {
+                  const due = isBillingDue(a)
+                  const paidThisMonth = !due && a.last_paid_at && (() => {
+                    const today = new Date()
+                    const [y, m] = a.last_paid_at!.split('-').map(Number)
+                    return y === today.getFullYear() && m === today.getMonth() + 1
+                  })()
+                  if (!due && !paidThisMonth) return null
+                  return (
+                    <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 'var(--r-md)', background: due ? 'color-mix(in oklch, #f59e0b, black 75%)' : 'color-mix(in oklch, var(--success), black 70%)', border: `1px solid ${due ? 'color-mix(in oklch, #f59e0b, black 45%)' : 'color-mix(in oklch, var(--success), black 45%)'}`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                      <span style={{ color: due ? '#f59e0b' : 'var(--success)', fontSize: 8 }}>●</span>
+                      <span style={{ color: 'var(--fg-2)', flex: 1 }}>
+                        {due ? 'Mensalidade pendente' : `Pago em ${a.last_paid_at!.split('-').slice(1).reverse().join('/')}`}
+                      </span>
+                      <span className="num" style={{ color: due ? '#f59e0b' : 'var(--success)', flexShrink: 0 }}>
+                        R$ {Number(a.billing_amount).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  )
+                })() : null}
+                {(() => {
+                  const used = checkinCounts[a.id] ?? 0
+                  const total = a.sessions_total ?? 0
+                  const remaining = total > 0 ? Math.max(0, total - used) : null
+                  const urgency = remaining === null ? null : remaining === 0 ? 'danger' : remaining <= 2 ? 'warn' : 'ok'
+                  const urgencyColor = urgency === 'danger' ? 'var(--danger)' : urgency === 'warn' ? '#f59e0b' : 'var(--accent)'
+                  const urgencyBg = urgency === 'danger' ? 'color-mix(in oklch, var(--danger), black 75%)' : urgency === 'warn' ? 'color-mix(in oklch, #f59e0b, black 75%)' : 'var(--ink-1)'
+                  const urgencyBorder = urgency === 'danger' ? 'color-mix(in oklch, var(--danger), black 40%)' : urgency === 'warn' ? 'color-mix(in oklch, #f59e0b, black 40%)' : 'var(--ink-4)'
+                  return (
+                    <>
+                      {remaining !== null && (
+                        <div style={{ margin: '12px 0', padding: '12px 14px', background: urgencyBg, borderRadius: 'var(--r-md)', border: `1px solid ${urgencyBorder}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span className="num" style={{ fontSize: 32, color: urgencyColor, lineHeight: 1, flexShrink: 0 }}>{remaining}</span>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-1)' }}>aulas restantes</div>
+                            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{used} de {total} realizadas</div>
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ marginTop: remaining !== null ? 0 : 12, display: 'flex', gap: 8 }}>
+                        <button onClick={(e) => { e.stopPropagation(); handleCheckIn(a.id) }}
+                          disabled={checkingInId === a.id}
+                          style={{ flex: 1, height: 36, borderRadius: 999, background: checkInSuccess === a.id ? 'var(--success)' : 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: checkingInId === a.id ? 0.6 : 1, transition: 'background 0.3s' }}>
+                          {checkingInId === a.id ? '...' : checkInSuccess === a.id ? '✓ Registrado!' : '✓ Check-in'}
+                        </button>
+                        <button onClick={() => copyInviteLink(a)}
+                          style={{ height: 36, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer' }}>
+                          Convite
+                        </button>
+                      </div>
+                    </>
+                  )
+                })()}
               </Card>
             )
           })}
@@ -858,8 +1040,15 @@ export default function DashboardPage() {
           </>
         ) : (
           <>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+              <button onClick={() => setShowLibrary(true)}
+                style={{ height: 36, padding: '0 16px', borderRadius: 999, background: 'var(--ink-1)', border: '1px solid var(--ink-4)', color: 'var(--fg-2)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
+                Biblioteca de exercícios
+              </button>
+            </div>
             <textarea value={workoutText} onChange={(e) => setWorkoutText(e.target.value)}
-              placeholder="Descreva o treino... Ex: Agachamento 4×10 com 60kg, descanso 90s..."
+              placeholder="Descreva o treino ou use a biblioteca acima para montar..."
               style={{ width: '100%', minHeight: 180, padding: '16px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 15, color: 'var(--fg-1)', resize: 'vertical', outline: 'none', lineHeight: 1.6 }}/>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
               <button onClick={handleProcessWorkout} disabled={!selectedAthleteId || processing || !workoutText.trim()}
@@ -1139,6 +1328,149 @@ export default function DashboardPage() {
               )}
             </div>
           )}
+
+          {/* Cobrança */}
+          <div style={{ marginTop: 24, marginBottom: 24 }}>
+            <div className="eyebrow" style={{ marginBottom: 12 }}>Cobrança mensal</div>
+            <Card style={{ padding: '16px 18px' }}>
+              {billingEditId === selectedAthleteForDetail.id ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Dia de vencimento</div>
+                      <input type="number" min="1" max="31" value={billingDay}
+                        onChange={(e) => setBillingDay(e.target.value)}
+                        placeholder="Ex: 5"
+                        style={{ ...inp, height: 40 }}/>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Valor (R$)</div>
+                      <input type="number" min="0" step="0.01" value={billingAmount}
+                        onChange={(e) => setBillingAmount(e.target.value)}
+                        placeholder="Ex: 150"
+                        style={{ ...inp, height: 40 }}/>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => handleSaveBilling(selectedAthleteForDetail.id)}
+                      style={{ flex: 1, height: 38, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
+                    <button onClick={() => setBillingEditId(null)}
+                      style={{ height: 38, padding: '0 14px', borderRadius: 999, background: 'transparent', color: 'var(--fg-3)', border: '1px solid var(--ink-4)', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{ flex: 1, display: 'flex', gap: 24 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>Vencimento</div>
+                      <div className="num" style={{ fontSize: 20, color: selectedAthleteForDetail.billing_day ? 'var(--fg-1)' : 'var(--fg-4)' }}>
+                        {selectedAthleteForDetail.billing_day ? `Dia ${selectedAthleteForDetail.billing_day}` : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>Valor</div>
+                      <div className="num" style={{ fontSize: 20, color: selectedAthleteForDetail.billing_amount ? 'var(--accent)' : 'var(--fg-4)' }}>
+                        {selectedAthleteForDetail.billing_amount
+                          ? `R$ ${Number(selectedAthleteForDetail.billing_amount).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`
+                          : '—'}
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => {
+                    setBillingEditId(selectedAthleteForDetail.id)
+                    setBillingDay(String(selectedAthleteForDetail.billing_day ?? ''))
+                    setBillingAmount(String(selectedAthleteForDetail.billing_amount ?? ''))
+                  }}
+                    style={{ height: 32, padding: '0 14px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>
+                    {selectedAthleteForDetail.billing_day ? 'Editar' : 'Configurar'}
+                  </button>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Histórico de aulas */}
+          <div style={{ marginTop: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div className="eyebrow">Histórico de aulas</div>
+              <button onClick={() => handleCheckIn(selectedAthleteForDetail.id)}
+                disabled={checkingInId === selectedAthleteForDetail.id}
+                style={{ height: 34, padding: '0 14px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: checkingInId === selectedAthleteForDetail.id ? 0.6 : 1 }}>
+                {checkingInId === selectedAthleteForDetail.id ? '...' : '✓ Check-in agora'}
+              </button>
+            </div>
+
+            <Card style={{ padding: '14px 16px', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Pacote de aulas</div>
+                  {packageEditId === selectedAthleteForDetail.id ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input type="number" min="0" value={packageEditValue} onChange={(e) => setPackageEditValue(e.target.value)}
+                        style={{ width: 80, height: 34, padding: '0 10px', background: 'var(--ink-1)', border: '1px solid var(--accent)', borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none', textAlign: 'center' }}/>
+                      <button onClick={() => handleSavePackage(selectedAthleteForDetail.id)}
+                        style={{ height: 34, padding: '0 14px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
+                      <button onClick={() => setPackageEditId(null)}
+                        style={{ height: 34, padding: '0 10px', borderRadius: 999, background: 'transparent', color: 'var(--fg-3)', border: '1px solid var(--ink-4)', fontSize: 12, cursor: 'pointer' }}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                      {selectedAthleteForDetail.sessions_total > 0 && (() => {
+                        const used = checkinCounts[selectedAthleteForDetail.id] ?? 0
+                        const remaining = Math.max(0, selectedAthleteForDetail.sessions_total - used)
+                        const color = remaining === 0 ? 'var(--danger)' : remaining <= 2 ? '#f59e0b' : 'var(--accent)'
+                        return (
+                          <div>
+                            <span className="num" style={{ fontSize: 36, color, lineHeight: 1 }}>{remaining}</span>
+                            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>restantes</div>
+                          </div>
+                        )
+                      })()}
+                      <div>
+                        <span className="num" style={{ fontSize: 36, color: 'var(--fg-2)', lineHeight: 1 }}>
+                          {checkinCounts[selectedAthleteForDetail.id] ?? 0}
+                        </span>
+                        <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
+                          {selectedAthleteForDetail.sessions_total > 0
+                            ? `de ${selectedAthleteForDetail.sessions_total} realizadas`
+                            : 'aulas realizadas'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {packageEditId !== selectedAthleteForDetail.id && (
+                  <button onClick={() => { setPackageEditId(selectedAthleteForDetail.id); setPackageEditValue(String(selectedAthleteForDetail.sessions_total)) }}
+                    style={{ height: 32, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>
+                    {selectedAthleteForDetail.sessions_total > 0 ? 'Editar' : 'Definir pacote'}
+                  </button>
+                )}
+              </div>
+            </Card>
+
+            {athleteCheckins.length === 0 ? (
+              <Card style={{ padding: '16px 18px' }}>
+                <div style={{ fontSize: 13, color: 'var(--fg-4)' }}>Nenhuma aula registrada ainda.</div>
+              </Card>
+            ) : (
+              <Card style={{ padding: 0, overflow: 'hidden' }}>
+                {athleteCheckins.map((c, i) => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < athleteCheckins.length - 1 ? '1px solid var(--ink-4)' : 'none' }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }}/>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>
+                        {new Date(c.checked_at).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                      </div>
+                      {c.notes && <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{c.notes}</div>}
+                    </div>
+                    <span className="num" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+                      {new Date(c.checked_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+              </Card>
+            )}
+          </div>
         </>
       )}
     </div>
@@ -1187,6 +1519,78 @@ export default function DashboardPage() {
     </div>
   )
 
+  // ── LIBRARY MODAL ─────────────────────────────────────────────────────────
+  const activeGroup = EXERCISE_LIBRARY.find((g) => g.key === libraryGroup) ?? EXERCISE_LIBRARY[0]
+
+  const libraryModal = showLibrary && (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', width: '100%', maxWidth: 560, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Header */}
+        <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>Biblioteca de exercícios</div>
+            <button onClick={() => setShowLibrary(false)}
+              style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--fg-2)', fontSize: 18, lineHeight: 1 }}>
+              ×
+            </button>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--fg-3)', marginBottom: 16 }}>
+            Toque em um exercício para adicioná-lo ao treino.
+            {workoutText.trim() && (
+              <span style={{ color: 'var(--accent)', marginLeft: 6 }}>
+                {workoutText.trim().split('\n').filter(Boolean).length} adicionado(s)
+              </span>
+            )}
+          </div>
+
+          {/* Group tabs — horizontal scroll */}
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 16, scrollbarWidth: 'none' }}>
+            {EXERCISE_LIBRARY.map((g) => (
+              <button key={g.key} onClick={() => setLibraryGroup(g.key)}
+                style={{ height: 32, padding: '0 14px', borderRadius: 999, fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0, cursor: 'pointer', background: libraryGroup === g.key ? 'var(--accent)' : 'var(--ink-1)', color: libraryGroup === g.key ? 'var(--accent-ink)' : 'var(--fg-3)', border: libraryGroup === g.key ? 'none' : '1px solid var(--ink-4)' }}>
+                {g.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Exercise list */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '0 24px 24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {activeGroup.exercises.map((ex) => {
+              const repsStr = ex.timed ? `${ex.reps}s` : `${ex.reps} reps`
+              return (
+                <button key={ex.name} onClick={() => handleAddFromLibrary(ex.name, ex.sets, ex.reps, ex.rest, ex.timed)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', cursor: 'pointer', textAlign: 'left', width: '100%', transition: 'border-color 0.15s' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--ink-4)')}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--fg-1)' }}>{ex.name}</div>
+                    <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
+                      {ex.sets} séries × {repsStr} · descanso {ex.rest}s
+                    </div>
+                  </div>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '14px 24px', borderTop: '1px solid var(--ink-4)', flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={() => setShowLibrary(false)}
+            style={{ height: 40, padding: '0 24px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+            Pronto
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ink-0)' }}>
       {sidebar}
@@ -1203,6 +1607,7 @@ export default function DashboardPage() {
       </div>
       {mobileBottomNav}
       {assignModal}
+      {libraryModal}
     </div>
   )
 }
