@@ -1832,7 +1832,11 @@ export default function DashboardPage() {
   const rankingView = (
     <div style={contentStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, gap: 12 }}>
-        <div className="display" style={{ fontSize: isMobile ? 30 : 36 }}>Ranking</div>
+        <div className="display" style={{ fontSize: isMobile ? 30 : 36 }}>
+          Ranking <span style={{ fontSize: isMobile ? 16 : 18, fontStyle: 'italic', color: 'var(--fg-3)', fontWeight: 300 }}>
+            {new Date().toLocaleDateString('pt-BR', { month: 'long' })}
+          </span>
+        </div>
         <button onClick={handleLoadRanking} disabled={loadingRanking}
           style={{ height: 38, padding: '0 16px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-2)', fontSize: 13, cursor: 'pointer', opacity: loadingRanking ? 0.6 : 1 }}>
           {loadingRanking ? 'Carregando...' : 'Atualizar'}

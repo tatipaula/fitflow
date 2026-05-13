@@ -639,19 +639,35 @@ export async function uploadAthleteAvatar(athleteId: string, file: File): Promis
 // ─── Ranking ──────────────────────────────────────────────────────────────────
 
 export async function getAthleteRankingStats(trainerId: string): Promise<AthleteRankingStats[]> {
-  const [athletes, checkinMap] = await Promise.all([
-    getAthletes(trainerId),
-    getCheckinCountsByTrainer(trainerId),
-  ])
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
+
+  const athletes = await getAthletes(trainerId)
   if (athletes.length === 0) return []
 
   const athleteIds = athletes.map((a) => a.id)
 
-  const { data: sessions } = await supabase
-    .from('sessions')
-    .select('id, athlete_id')
-    .in('athlete_id', athleteIds)
-    .not('completed_at', 'is', null)
+  const [{ data: sessions }, { data: checkinRows }] = await Promise.all([
+    supabase
+      .from('sessions')
+      .select('id, athlete_id')
+      .in('athlete_id', athleteIds)
+      .not('completed_at', 'is', null)
+      .gte('completed_at', monthStart)
+      .lt('completed_at', monthEnd),
+    supabase
+      .from('class_checkins')
+      .select('athlete_id')
+      .eq('trainer_id', trainerId)
+      .gte('checked_at', monthStart)
+      .lt('checked_at', monthEnd),
+  ])
+
+  const checkinMap: Record<string, number> = {}
+  for (const row of (checkinRows ?? []) as { athlete_id: string }[]) {
+    checkinMap[row.athlete_id] = (checkinMap[row.athlete_id] ?? 0) + 1
+  }
 
   const sessionRows = (sessions ?? []) as { id: string; athlete_id: string }[]
   const sessionIds = sessionRows.map((s) => s.id)
