@@ -208,6 +208,24 @@ export default function WorkoutPage() {
     return Object.entries(byWeek).slice(-6).map(([week, count]) => ({ week, count }))
   }, [sessions])
 
+  const nextWorkout = useMemo(() => {
+    if (availableWorkouts.length <= 1) return availableWorkouts[0] ?? null
+    const lastDoneAt: Record<string, string> = {}
+    for (const s of sessions) {
+      if (s.completed_at && (!lastDoneAt[s.workout_id] || s.completed_at > lastDoneAt[s.workout_id])) {
+        lastDoneAt[s.workout_id] = s.completed_at
+      }
+    }
+    return [...availableWorkouts].sort((a, b) => {
+      const aLast = lastDoneAt[a.id]
+      const bLast = lastDoneAt[b.id]
+      if (!aLast && !bLast) return 0
+      if (!aLast) return -1
+      if (!bLast) return 1
+      return aLast < bLast ? -1 : 1
+    })[0]
+  }, [availableWorkouts, sessions])
+
   const exerciseLoadData = useMemo(() => {
     const map: Record<string, { best: number; last: number }> = {}
     sessions.forEach((s) => {
@@ -647,15 +665,71 @@ export default function WorkoutPage() {
           </div>
         ) : (
           <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ marginBottom: 8 }}>
-              <div className="display" style={{ fontSize: 28, lineHeight: 1 }}>
-                Escolha seu <span style={{ fontStyle: 'italic' }}>treino</span>
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 8 }}>
-                {availableWorkouts.length} ficha{availableWorkouts.length !== 1 ? 's' : ''} disponível{availableWorkouts.length !== 1 ? 'is' : ''}
-              </div>
-            </div>
-            {availableWorkouts.map((w) => (
+            {availableWorkouts.length > 1 ? (() => {
+              const lastDoneAt: Record<string, string> = {}
+              for (const s of sessions) {
+                if (s.completed_at && (!lastDoneAt[s.workout_id] || s.completed_at > lastDoneAt[s.workout_id])) {
+                  lastDoneAt[s.workout_id] = s.completed_at
+                }
+              }
+              const others = availableWorkouts.filter((w) => w.id !== nextWorkout?.id)
+              const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+              return (
+                <>
+                  {/* Próximo treino */}
+                  {nextWorkout && (
+                    <div>
+                      <div className="eyebrow" style={{ marginBottom: 10, color: 'var(--accent)' }}>Próximo treino</div>
+                      <button onClick={() => selectWorkout(nextWorkout)}
+                        style={{ width: '100%', textAlign: 'left', background: 'var(--ink-2)', border: '1px solid var(--accent)', borderRadius: 'var(--r-lg)', padding: '18px 20px', cursor: 'pointer', color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', overflow: 'hidden' }}>
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.7 }}/>
+                        <div style={{ width: 48, height: 48, borderRadius: 'var(--r-md)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {KVIcon.dumbbell(22, 'var(--accent)')}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 17, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {nextWorkout.name ?? 'Treino sem nome'}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>
+                            {lastDoneAt[nextWorkout.id]
+                              ? `Feito há ${daysSince(lastDoneAt[nextWorkout.id])} dia${daysSince(lastDoneAt[nextWorkout.id]) !== 1 ? 's' : ''}`
+                              : 'Nunca realizado'}
+                          </div>
+                        </div>
+                        {KVIcon.chevR(14, 'var(--accent)')}
+                      </button>
+                    </div>
+                  )}
+                  {/* Outros treinos */}
+                  {others.length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      <div className="eyebrow" style={{ marginBottom: 10 }}>Outros treinos</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {others.map((w) => (
+                          <button key={w.id} onClick={() => selectWorkout(w)}
+                            style={{ width: '100%', textAlign: 'left', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: '14px 16px', cursor: 'pointer', color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 14 }}>
+                            <div style={{ width: 38, height: 38, borderRadius: 'var(--r-md)', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              {KVIcon.dumbbell(16, 'var(--fg-3)')}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {w.name ?? 'Treino sem nome'}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 2 }}>
+                                {lastDoneAt[w.id]
+                                  ? `Feito há ${daysSince(lastDoneAt[w.id])} dia${daysSince(lastDoneAt[w.id]) !== 1 ? 's' : ''}`
+                                  : 'Nunca realizado'}
+                              </div>
+                            </div>
+                            {KVIcon.chevR(12, 'var(--fg-4)')}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })() : availableWorkouts.map((w) => (
               <button key={w.id} onClick={() => selectWorkout(w)}
                 style={{ width: '100%', textAlign: 'left', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: '18px 20px', cursor: 'pointer', color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
