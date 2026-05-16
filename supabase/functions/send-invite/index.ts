@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Kinevia <onboarding@resend.dev>',
+        from: 'Kinevia <no-reply@kinevia.com.br>',
         to: athlete_email,
         subject: `${trainer_name ?? 'Seu personal trainer'} te convidou para o Kinevia`,
         html: `

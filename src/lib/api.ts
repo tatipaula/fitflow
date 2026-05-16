@@ -29,6 +29,14 @@ import { supabase } from './supabase'
 import { transcribeAudio } from './whisper'
 import { searchExerciseVideo } from './youtube'
 
+// ─── Emails ───────────────────────────────────────────────────────────────────
+
+export async function sendWelcomeEmail(trainerName: string, trainerEmail: string): Promise<void> {
+  await supabase.functions.invoke('welcome-trainer', {
+    body: { trainer_name: trainerName, trainer_email: trainerEmail },
+  })
+}
+
 // ─── Trainers ─────────────────────────────────────────────────────────────────
 
 export async function getTrainer(id: string): Promise<Trainer | null> {

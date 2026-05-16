@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import { sendWelcomeEmail } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 import { KVLogo, KVButton } from '@/components/ui'
 import { PWAInstallBanner } from '@/components/ui/PWAInstallBanner'
@@ -55,6 +56,7 @@ export default function LoginPage() {
         options: { data: { name } },
       })
       if (error) { setError(friendlyError(error.message)); return }
+      sendWelcomeEmail(name, email)
       if (!data.session) setEmailSent(true)
     } catch {
       setError('Verifique sua conexão e tente novamente.')

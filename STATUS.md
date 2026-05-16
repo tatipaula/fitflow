@@ -1,6 +1,6 @@
 # Kinevia — Status
 
-## Última atualização: 2026-05-13
+## Última atualização: 2026-05-16
 
 ---
 
@@ -52,6 +52,13 @@
 - Bucket `avatars` no Supabase Storage
 - Deploy em produção ✓
 
+### Sprint 7 — Emails transacionais (sessão 16)
+- Domínio `kinevia.com.br` verificado no Resend
+- Remetente atualizado para `no-reply@kinevia.com.br` em todas as edge functions
+- 4 novas edge functions: `welcome-trainer`, `offer-plans`, `purchase-confirmed`, `recovery`
+- `welcome-trainer` conectado ao cadastro do trainer (`LoginPage.tsx` → `api.ts` → edge function)
+- Deploy em produção ✓
+
 ### Sprint 6 — Melhorias de produto (sessão 15)
 - **Posição do atleta no ranking**: aluno vê sua posição (1º/5, 2º/5...) por categoria no Perfil
   - Função RPC `get_athlete_ranking_position` (security definer, ranking mensal)
@@ -70,7 +77,7 @@
 
 ## Pendências imediatas
 
-- **Domínio no Resend**: verificar `kinevia.com.br` e trocar remetente de `onboarding@resend.dev` para `no-reply@kinevia.com.br`
+- **Stripe**: definir canal de pagamento (web vs app store). Após decisão: implementar checkout, conectar `purchase-confirmed` no webhook, conectar `offer-plans` via pg_cron para plano free, conectar `recovery` para carrinhos abandonados.
 
 ---
 
