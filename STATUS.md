@@ -1,6 +1,6 @@
 # Kinevia — Status
 
-## Última atualização: 2026-05-16
+## Última atualização: 2026-05-18
 
 ---
 
@@ -50,6 +50,16 @@
 - Campos `birth_date`, `height_cm`, `objective`, `avatar_url` em athletes (migration aplicada)
 - Tabela `badges` com RLS (migration aplicada)
 - Bucket `avatars` no Supabase Storage
+- Deploy em produção ✓
+
+### Sprint 8 — Chave Pix copiável no banner de cobrança (sessão 17)
+- Chave Pix do treinador exibida no banner de mensalidade do aluno (label + container destacado)
+- Botão "Copiar" com feedback visual "Copiado!" por 2 segundos via `navigator.clipboard`
+- Bug corrigido: dados do atleta buscados direto do banco ao abrir o app (não mais do store em cache)
+- Bug corrigido: banner usa `billingAthlete` (dados frescos) em vez do `athlete` do store
+- RLS corrigida: nova política `athlete: select own trainer` permite aluno ler pix_key do treinador
+- Auto-reload do PWA ao detectar novo service worker (`controllerchange` em `main.tsx`)
+- Migration `20260518000001_trainer_readable_by_athlete.sql` aplicada
 - Deploy em produção ✓
 
 ### Sprint 7 — Emails transacionais (sessão 16)

@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { KVLogo, KVButton, KVTag, KVAvatar, KVIcon } from '@/components/ui'
-import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, confirmPayment, updateAthleteProfile, uploadAthleteAvatar, getBadgesByAthlete, getAthleteRankingPosition } from '@/lib/api'
+import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, confirmPayment, updateAthleteProfile, uploadAthleteAvatar, getBadgesByAthlete, getAthleteRankingPosition, getAthleteByAuthId } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
 import type { Athlete, AthleteRankingPosition, Badge, Workout, Exercise, SessionWithLogs, Trainer } from '@/types'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
@@ -38,8 +38,10 @@ export default function WorkoutPage() {
   const [sessions, setSessions] = useState<SessionWithLogs[]>([])
 
   const [trainerForBilling, setTrainerForBilling] = useState<Trainer | null>(null)
+  const [billingAthlete, setBillingAthlete] = useState<Athlete | null>(null)
   const [billingPaid, setBillingPaid] = useState(false)
   const [confirmingPayment, setConfirmingPayment] = useState(false)
+  const [pixCopied, setPixCopied] = useState(false)
 
   // Perfil
   const [profileData, setProfileData] = useState<Partial<Pick<Athlete, 'phone' | 'weight_kg' | 'birth_date' | 'height_cm' | 'objective'>>>({})
@@ -62,20 +64,25 @@ export default function WorkoutPage() {
       objective: athlete.objective ?? undefined,
     })
     async function load() {
-      const allWorkouts = await getAthleteWorkouts(athlete!.id)
+      const freshAthlete = athlete!.auth_user_id
+        ? (await getAthleteByAuthId(athlete!.auth_user_id)) ?? athlete!
+        : athlete!
+
+      const allWorkouts = await getAthleteWorkouts(freshAthlete.id)
       const ready = allWorkouts.filter((w) => w.status === 'ready')
       setAvailableWorkouts(ready)
       if (ready.length === 1) await selectWorkout(ready[0])
       const [s, badges, rankPos] = await Promise.all([
-        getAthleteSessions(athlete!.id),
-        getBadgesByAthlete(athlete!.id),
-        getAthleteRankingPosition(athlete!.trainer_id, athlete!.id),
+        getAthleteSessions(freshAthlete.id),
+        getBadgesByAthlete(freshAthlete.id),
+        getAthleteRankingPosition(freshAthlete.trainer_id, freshAthlete.id),
       ])
       setSessions(s)
       setAthleteBadges(badges)
       setRankingPosition(rankPos)
-      if (isBillingDue(athlete!)) {
-        const t = await getTrainer(athlete!.trainer_id)
+      if (isBillingDue(freshAthlete)) {
+        setBillingAthlete(freshAthlete)
+        const t = await getTrainer(freshAthlete.trainer_id)
         setTrainerForBilling(t)
       }
       setLoading(false)
@@ -320,19 +327,33 @@ export default function WorkoutPage() {
     setConfirmingPayment(false)
   }
 
-  const billingBanner = !billingPaid && athlete && isBillingDue(athlete) && (
+  const billingBanner = !billingPaid && billingAthlete && (
     <div style={{ margin: '0 20px 16px', padding: '16px 18px', background: 'var(--ink-2)', border: '1px solid var(--accent)', borderRadius: 'var(--r-lg)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 6, color: 'var(--accent)' }}>Mensalidade</div>
-          {athlete.billing_amount && (
+          {billingAthlete.billing_amount && (
             <div className="num" style={{ fontSize: 28, color: 'var(--accent)', lineHeight: 1 }}>
-              R$ {Number(athlete.billing_amount).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+              R$ {Number(billingAthlete.billing_amount).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
             </div>
           )}
           {trainerForBilling?.pix_key && (
-            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 6, fontFamily: "'JetBrains Mono', monospace", wordBreak: 'break-all' }}>
-              Pix: {trainerForBilling.pix_key}
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Chave Pix</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--ink-1)', border: '1px solid var(--fg-2)', borderRadius: 'var(--r-md)', padding: '8px 12px' }}>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--fg-1)', fontFamily: "'JetBrains Mono', monospace", wordBreak: 'break-all', lineHeight: 1.4 }}>
+                  {trainerForBilling.pix_key}
+                </span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(trainerForBilling!.pix_key!)
+                    setPixCopied(true)
+                    setTimeout(() => setPixCopied(false), 2000)
+                  }}
+                  style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: 999, background: pixCopied ? 'var(--accent)' : 'transparent', color: pixCopied ? 'var(--accent-ink)' : 'var(--fg-2)', border: `1px solid ${pixCopied ? 'var(--accent)' : 'var(--fg-2)'}`, fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s', letterSpacing: '0.04em' }}>
+                  {pixCopied ? 'Copiado!' : 'Copiar'}
+                </button>
+              </div>
             </div>
           )}
         </div>
