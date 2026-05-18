@@ -93,7 +93,9 @@
 
 ## Backlog
 
-- Organização de treinos por dias da semana (estrutura a definir)
+- Organização de treinos por dias da semana (empilhamento dos antigos + estrutura por dia)
+- **Visão de pagamentos — aluno**: aba "Pagamentos" no WorkoutPage com histórico de mensalidades, status do mês corrente e chave Pix do treinador sempre visível
+- **Visão de pagamentos — personal**: aba ou seção no Dashboard com histórico de recebimentos por atleta, filtro por mês e status consolidado (quem pagou / quem está em aberto)
 - Stripe: definir canal de pagamento (web vs app store) e implementar
 - Métricas de evolução de cargas por exercício (histórico comparável)
 - Integração WhatsApp para notificações de cobrança
