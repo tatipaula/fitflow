@@ -3,9 +3,9 @@ import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { KVLogo, KVButton, KVTag, KVAvatar, KVIcon } from '@/components/ui'
-import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, confirmPayment, updateAthleteProfile, uploadAthleteAvatar, getBadgesByAthlete, getAthleteRankingPosition, getAthleteByAuthId } from '@/lib/api'
+import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, calcOverdueMonths, confirmPayment, updateAthleteProfile, uploadAthleteAvatar, getBadgesByAthlete, getAthleteRankingPosition, getAthleteByAuthId, getProgramsByAthlete } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
-import type { Athlete, AthleteRankingPosition, Badge, Workout, Exercise, SessionWithLogs, Trainer } from '@/types'
+import type { Athlete, AthleteRankingPosition, Badge, Program, Workout, Exercise, SessionWithLogs, Trainer } from '@/types'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 type AthleteTab = 'treinos' | 'evolucao' | 'perfil'
@@ -52,6 +52,8 @@ export default function WorkoutPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [athleteBadges, setAthleteBadges] = useState<Badge[]>([])
   const [rankingPosition, setRankingPosition] = useState<AthleteRankingPosition | null>(null)
+  const [activeProgram, setActiveProgram] = useState<Program | null>(null)
+  const [programExpanded, setProgramExpanded] = useState(false)
 
   useEffect(() => {
     if (!athlete) { setLoading(false); return }
@@ -72,14 +74,16 @@ export default function WorkoutPage() {
       const ready = allWorkouts.filter((w) => w.status === 'ready')
       setAvailableWorkouts(ready)
       if (ready.length === 1) await selectWorkout(ready[0])
-      const [s, badges, rankPos] = await Promise.all([
+      const [s, badges, rankPos, programs] = await Promise.all([
         getAthleteSessions(freshAthlete.id),
         getBadgesByAthlete(freshAthlete.id),
         getAthleteRankingPosition(freshAthlete.trainer_id, freshAthlete.id),
+        getProgramsByAthlete(freshAthlete.id),
       ])
       setSessions(s)
       setAthleteBadges(badges)
       setRankingPosition(rankPos)
+      setActiveProgram(programs.find((p) => p.status === 'active') ?? null)
       if (isBillingDue(freshAthlete)) {
         setBillingAthlete(freshAthlete)
         const t = await getTrainer(freshAthlete.trainer_id)
@@ -319,22 +323,57 @@ export default function WorkoutPage() {
   )
 
   // ── Billing ───────────────────────────────────────────────────────────────
-  async function handleConfirmPayment() {
+  async function handleConfirmPayment(date?: string) {
     if (!athlete) return
     setConfirmingPayment(true)
-    const ok = await confirmPayment(athlete.id)
-    if (ok) setBillingPaid(true)
+    const ok = await confirmPayment(athlete.id, date)
+    if (ok) {
+      if (date) {
+        const updated = { ...billingAthlete!, last_paid_at: date }
+        setBillingAthlete(updated)
+        if (calcOverdueMonths(updated) === 0) setBillingPaid(true)
+      } else {
+        setBillingPaid(true)
+      }
+    }
     setConfirmingPayment(false)
   }
 
-  const billingBanner = !billingPaid && billingAthlete && (
+  const billingBanner = !billingPaid && billingAthlete && (() => {
+    const overdueMonths = calcOverdueMonths(billingAthlete)
+    const totalOwed = overdueMonths > 1
+      ? overdueMonths * (billingAthlete.billing_amount ?? 0)
+      : (billingAthlete.billing_amount ?? 0)
+    const oneMonthDate = (() => {
+      const a = billingAthlete
+      if (!a.billing_day) return undefined
+      const pad = (n: number) => String(n).padStart(2, '0')
+      let sy: number, sm: number
+      if (a.last_paid_at) {
+        const [y, m] = a.last_paid_at.split('-').map(Number)
+        sm = m === 12 ? 1 : m + 1; sy = m === 12 ? y + 1 : y
+      } else {
+        const created = new Date(a.created_at)
+        sy = created.getFullYear(); sm = created.getMonth() + 1
+        if (created.getDate() > a.billing_day) { sm++; if (sm > 12) { sm = 1; sy++ } }
+      }
+      return `${sy}-${pad(sm)}-${pad(a.billing_day)}`
+    })()
+    return (
     <div style={{ margin: '0 20px 16px', padding: '16px 18px', background: 'var(--ink-2)', border: '1px solid var(--accent)', borderRadius: 'var(--r-lg)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <div>
-          <div className="eyebrow" style={{ marginBottom: 6, color: 'var(--accent)' }}>Mensalidade</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="eyebrow" style={{ marginBottom: 6, color: 'var(--accent)' }}>
+            {overdueMonths > 1 ? `${overdueMonths} mensalidades em aberto` : 'Mensalidade'}
+          </div>
           {billingAthlete.billing_amount && (
             <div className="num" style={{ fontSize: 28, color: 'var(--accent)', lineHeight: 1 }}>
-              R$ {Number(billingAthlete.billing_amount).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+              R$ {Number(totalOwed).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+            </div>
+          )}
+          {overdueMonths > 1 && (
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
+              R$ {Number(billingAthlete.billing_amount).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}/mês × {overdueMonths}
             </div>
           )}
           {trainerForBilling?.pix_key && (
@@ -357,13 +396,22 @@ export default function WorkoutPage() {
             </div>
           )}
         </div>
-        <button onClick={handleConfirmPayment} disabled={confirmingPayment}
-          style={{ height: 40, padding: '0 20px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0, opacity: confirmingPayment ? 0.6 : 1 }}>
-          {confirmingPayment ? '...' : 'Paguei ✓'}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          <button onClick={() => handleConfirmPayment()} disabled={confirmingPayment}
+            style={{ height: 40, padding: '0 20px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: confirmingPayment ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+            {confirmingPayment ? '...' : overdueMonths > 1 ? `Paguei tudo ✓` : 'Paguei ✓'}
+          </button>
+          {overdueMonths > 1 && oneMonthDate && (
+            <button onClick={() => handleConfirmPayment(oneMonthDate)} disabled={confirmingPayment}
+              style={{ height: 32, padding: '0 14px', borderRadius: 999, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', fontSize: 12, cursor: 'pointer', opacity: confirmingPayment ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+              Só 1 mês
+            </button>
+          )}
+        </div>
       </div>
     </div>
-  )
+    )
+  })()
 
   // ── Header ────────────────────────────────────────────────────────────────
   async function handleSignOut() {
@@ -622,6 +670,71 @@ export default function WorkoutPage() {
       {pageHeader('Treinos')}
       {billingBanner}
 
+      {/* Banner de programa ativo */}
+      {!workout && activeProgram && (() => {
+        const programWorkouts = availableWorkouts.filter((w) => w.program_id === activeProgram.id)
+        const totalWorkouts = activeProgram.duration_weeks * 3
+        const completedSessions = sessions.filter((s) =>
+          programWorkouts.some((w) => w.id === s.workout_id)
+        ).length
+        const progressPct = totalWorkouts > 0 ? Math.min(100, Math.round((completedSessions / totalWorkouts) * 100)) : 0
+        const currentWeek = Math.min(activeProgram.duration_weeks, Math.floor(completedSessions / 3) + 1)
+        return (
+          <div style={{ margin: '0 20px 16px', background: 'var(--ink-2)', border: '1px solid var(--accent)', borderRadius: 'var(--r-lg)', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: 0, left: 20, right: 20, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.5 }}/>
+            {/* Header clicável */}
+            <button onClick={() => setProgramExpanded((v) => !v)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '16px 18px', background: 'none', border: 'none', color: 'var(--fg-1)', cursor: 'pointer', textAlign: 'left' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+                  Programa ativo
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>{activeProgram.name}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="num" style={{ fontSize: 22, color: 'var(--accent)', lineHeight: 1 }}>{progressPct}%</div>
+                  <div style={{ fontSize: 10, color: 'var(--fg-3)', marginTop: 2 }}>
+                    Semana {currentWeek}/{activeProgram.duration_weeks}
+                  </div>
+                </div>
+                <div style={{ transform: programExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
+                  {KVIcon.chevR(14, 'var(--accent)')}
+                </div>
+              </div>
+            </button>
+            {/* Barra de progresso */}
+            <div style={{ height: 3, background: 'var(--ink-4)', margin: '0 18px' }}>
+              <div style={{ height: '100%', width: `${progressPct}%`, background: 'var(--accent)', transition: 'width 0.5s ease' }}/>
+            </div>
+            {/* Treinos do programa expandidos */}
+            {programExpanded && (
+              <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {programWorkouts.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--fg-4)', padding: '6px 4px' }}>Nenhum treino disponível neste programa.</div>
+                ) : (
+                  programWorkouts
+                    .slice()
+                    .sort((a, b) => (a.program_order ?? 0) - (b.program_order ?? 0))
+                    .map((w) => (
+                      <button key={w.id} onClick={() => { selectWorkout(w); setProgramExpanded(false) }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', cursor: 'pointer', color: 'var(--fg-1)', textAlign: 'left' }}>
+                        <span className="num" style={{ fontSize: 9, color: 'var(--accent)', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                          D{(w.program_order ?? 0) + 1}
+                        </span>
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {w.name ?? 'Treino sem nome'}
+                        </span>
+                        {KVIcon.chevR(12, 'var(--fg-4)')}
+                      </button>
+                    ))
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
       {!workout ? (
         availableWorkouts.length === 0 ? (
           <div style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -676,24 +789,32 @@ export default function WorkoutPage() {
                 {availableWorkouts.length} ficha{availableWorkouts.length !== 1 ? 's' : ''} disponível{availableWorkouts.length !== 1 ? 'is' : ''}
               </div>
             </div>
-            {availableWorkouts.map((w) => (
-              <button key={w.id} onClick={() => selectWorkout(w)}
-                style={{ width: '100%', textAlign: 'left', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: '18px 20px', cursor: 'pointer', color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
-                <div style={{ width: 44, height: 44, borderRadius: 'var(--r-md)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {KVIcon.dumbbell(20, 'var(--accent)')}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {w.name ?? 'Treino sem nome'}
+            {availableWorkouts.map((w) => {
+              const prog = w.program_id ? (activeProgram?.id === w.program_id ? activeProgram : null) : null
+              const dayLabel = prog && w.program_order != null ? `Dia ${w.program_order + 1} — ${prog.name}` : null
+              return (
+                <button key={w.id} onClick={() => selectWorkout(w)}
+                  style={{ width: '100%', textAlign: 'left', background: 'var(--ink-2)', border: `1px solid ${prog ? 'var(--accent)' : 'var(--ink-4)'}`, borderRadius: 'var(--r-lg)', padding: '18px 20px', cursor: 'pointer', color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
+                  <div style={{ width: 44, height: 44, borderRadius: 'var(--r-md)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {KVIcon.dumbbell(20, 'var(--accent)')}
                   </div>
-                  <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
-                    {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {w.name ?? 'Treino sem nome'}
+                    </div>
+                    {dayLabel ? (
+                      <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 3, fontFamily: "'JetBrains Mono', monospace" }}>{dayLabel}</div>
+                    ) : (
+                      <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 3 }}>
+                        {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
+                      </div>
+                    )}
                   </div>
-                </div>
-                {KVIcon.chevR(14, 'var(--fg-4)')}
-              </button>
-            ))}
+                  {KVIcon.chevR(14, 'var(--fg-4)')}
+                </button>
+              )
+            })}
           </div>
         )
       ) : (

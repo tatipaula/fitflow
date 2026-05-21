@@ -1,6 +1,6 @@
 # Kinevia — Status
 
-## Última atualização: 2026-05-18
+## Última atualização: 2026-05-21
 
 ---
 
@@ -52,6 +52,34 @@
 - Bucket `avatars` no Supabase Storage
 - Deploy em produção ✓
 
+### Sprint 9 — Programas de treino + Módulo de cobranças (sessão 18)
+
+#### Programas de treino
+- Tabela `programs` com RLS: agrupamento de treinos por programa por atleta
+- Colunas `program_id` e `program_order` adicionadas a `workouts` (nullable, aditivo)
+- Trigger SQL `trg_check_program_completion` auto-completa programa quando todos os treinos têm sessão
+- Migration `20260521000001_programs.sql` aplicada em produção
+- Novos tipos: `Program`, `ProgramWithWorkouts`, `CreateProgramInput`, `ProgramStatus`
+- API: `getProgramsByAthlete`, `getTrainerPrograms`, `createProgram`, `assignWorkoutToProgram`, `removeWorkoutFromProgram`, `updateProgramStatus`
+- **Trainer — fluxo pós-áudio**: após confirmar treino, step opcional "Adicionar a um programa?"
+- **Trainer — detalhe do atleta**: seção "Treinos" unificada (programas expansíveis + treinos soltos)
+  - Treinos dentro de programa: clicáveis, expandem exercícios sob demanda
+  - Treinos soltos: clicáveis + dropdown "Adicionar a programa..."
+- **Trainer — visão global de Treinos**: busca por atleta/treino + tag de programa em cada card
+- **Atleta — banner de programa ativo**: clicável, expande lista de dias do programa; cada dia inicia o treino direto
+- Deploy em produção ✓
+
+#### Módulo de cobranças
+- Nova view "Cobranças" acessível pelo sininho (mobile header + sidebar desktop)
+- Lista de atletas com billing configurado, ordenada por meses em aberto
+- Filtro por chips: Todos / Pendente / Pago
+- `calcOverdueMonths()` exportada de `api.ts`: calcula acúmulo real de meses em aberto a partir de `last_paid_at` + `created_at`
+- Trainer: badge "N meses em aberto · R$ X devidos" + dois botões ("Quitar tudo" / "Só 1 mês")
+- Atleta: banner exibe total acumulado correto + dois botões ("Paguei tudo ✓" / "Só 1 mês") quando há acúmulo
+- "Só 1 mês" avança `last_paid_at` para o mês mais antigo pendente; contador reduz em 1 sem fechar o banner
+- Mês de referência visível em cada linha (ex: `dia 10 · mai/25`)
+- Deploy em produção ✓
+
 ### Sprint 8 — Chave Pix copiável no banner de cobrança (sessão 17)
 - Chave Pix do treinador exibida no banner de mensalidade do aluno (label + container destacado)
 - Botão "Copiar" com feedback visual "Copiado!" por 2 segundos via `navigator.clipboard`
@@ -93,9 +121,8 @@
 
 ## Backlog
 
-- Organização de treinos por dias da semana (empilhamento dos antigos + estrutura por dia)
-- **Visão de pagamentos — aluno**: aba "Pagamentos" no WorkoutPage com histórico de mensalidades, status do mês corrente e chave Pix do treinador sempre visível
-- **Visão de pagamentos — personal**: aba ou seção no Dashboard com histórico de recebimentos por atleta, filtro por mês e status consolidado (quem pagou / quem está em aberto)
+- Histórico de pagamentos por mês (requer tabela `payment_logs`)
 - Stripe: definir canal de pagamento (web vs app store) e implementar
 - Métricas de evolução de cargas por exercício (histórico comparável)
 - Integração WhatsApp para notificações de cobrança
+- Auto-completar programa via trigger já implementado — validar em produção com dados reais

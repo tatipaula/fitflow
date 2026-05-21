@@ -2,6 +2,8 @@
 
 export type WorkoutStatus = 'pending' | 'transcribing' | 'parsing' | 'ready' | 'error'
 
+export type ProgramStatus = 'active' | 'upcoming' | 'completed'
+
 export type UserPlan = 'free' | 'pro'
 
 export type UserRole = 'trainer' | 'athlete'
@@ -93,6 +95,26 @@ export interface InviteWithAthlete extends Invite {
   athletes: Pick<Athlete, 'id' | 'name' | 'email' | 'phone'>
 }
 
+export interface Program {
+  id: string
+  name: string
+  duration_weeks: number
+  status: ProgramStatus
+  athlete_id: string
+  trainer_id: string
+  created_at: string
+}
+
+export interface ProgramWithWorkouts extends Program {
+  workouts: Workout[]
+}
+
+export interface CreateProgramInput {
+  name: string
+  duration_weeks: number
+  athlete_id: string
+}
+
 export interface Workout {
   id: string
   trainer_id: string
@@ -102,6 +124,8 @@ export interface Workout {
   transcript: string | null
   raw_json: Exercise[] | null
   status: WorkoutStatus
+  program_id: string | null
+  program_order: number | null
   created_at: string
 }
 

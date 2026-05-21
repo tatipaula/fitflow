@@ -11,12 +11,16 @@ import type {
   Badge,
   ClassCheckin,
   CreateAthleteInput,
+  CreateProgramInput,
   CreateWorkoutInput,
   Exercise,
   Invite,
   InviteWithAthlete,
   LogSetInput,
   ParqResponse,
+  Program,
+  ProgramStatus,
+  ProgramWithWorkouts,
   Session,
   SessionWithLogs,
   SetLog,
@@ -550,11 +554,41 @@ export function isBillingDue(athlete: Athlete): boolean {
   return paidYear < today.getFullYear() || paidMonth < today.getMonth() + 1
 }
 
-export async function confirmPayment(athleteId: string): Promise<boolean> {
-  const today = new Date().toISOString().split('T')[0]
+export function calcOverdueMonths(athlete: Athlete): number {
+  if (!athlete.billing_day || !athlete.billing_amount) return 0
+  const today = new Date()
+  const todayYear = today.getFullYear()
+  const todayMonth = today.getMonth() + 1
+  const todayDay = today.getDate()
+
+  let startYear: number, startMonth: number
+  if (athlete.last_paid_at) {
+    const [y, m] = athlete.last_paid_at.split('-').map(Number)
+    startMonth = m === 12 ? 1 : m + 1
+    startYear = m === 12 ? y + 1 : y
+  } else {
+    const created = new Date(athlete.created_at)
+    startYear = created.getFullYear()
+    startMonth = created.getMonth() + 1
+    if (created.getDate() > athlete.billing_day) {
+      startMonth++; if (startMonth > 12) { startMonth = 1; startYear++ }
+    }
+  }
+
+  let count = 0, y = startYear, m = startMonth
+  while (y < todayYear || (y === todayYear && m <= todayMonth)) {
+    const isCurrent = y === todayYear && m === todayMonth
+    if (!isCurrent || todayDay >= athlete.billing_day) count++
+    m++; if (m > 12) { m = 1; y++ }
+  }
+  return count
+}
+
+export async function confirmPayment(athleteId: string, date?: string): Promise<boolean> {
+  const paidAt = date ?? new Date().toISOString().split('T')[0]
   const { error } = await supabase
     .from('athletes')
-    .update({ last_paid_at: today })
+    .update({ last_paid_at: paidAt })
     .eq('id', athleteId)
   return !error
 }
@@ -757,5 +791,92 @@ export async function createBadge(
 
 export async function deleteBadge(badgeId: string): Promise<boolean> {
   const { error } = await supabase.from('badges').delete().eq('id', badgeId)
+  return !error
+}
+
+// ─── Programs ─────────────────────────────────────────────────────────────────
+
+export async function getTrainerPrograms(trainerId: string): Promise<Program[]> {
+  const { data, error } = await supabase
+    .from('programs')
+    .select('*')
+    .eq('trainer_id', trainerId)
+    .order('created_at', { ascending: false })
+  if (error || !data) return []
+  return data as Program[]
+}
+
+export async function getProgramsByAthlete(athleteId: string): Promise<ProgramWithWorkouts[]> {
+  const { data: programs, error: progErr } = await supabase
+    .from('programs')
+    .select('*')
+    .eq('athlete_id', athleteId)
+    .order('created_at', { ascending: false })
+  if (progErr || !programs) return []
+
+  const { data: workouts, error: wErr } = await supabase
+    .from('workouts')
+    .select('*')
+    .eq('athlete_id', athleteId)
+    .not('program_id', 'is', null)
+    .order('program_order', { ascending: true })
+  if (wErr) return programs.map((p) => ({ ...p, workouts: [] })) as ProgramWithWorkouts[]
+
+  const workoutsByProgram: Record<string, Workout[]> = {}
+  for (const w of (workouts ?? []) as Workout[]) {
+    if (!w.program_id) continue
+    if (!workoutsByProgram[w.program_id]) workoutsByProgram[w.program_id] = []
+    workoutsByProgram[w.program_id].push(w)
+  }
+
+  return (programs as Program[]).map((p) => ({
+    ...p,
+    workouts: workoutsByProgram[p.id] ?? [],
+  }))
+}
+
+export async function createProgram(input: CreateProgramInput): Promise<Program | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+  const { data, error } = await supabase
+    .from('programs')
+    .insert({
+      trainer_id: session.user.id,
+      athlete_id: input.athlete_id,
+      name: input.name,
+      duration_weeks: input.duration_weeks,
+      status: 'active',
+    })
+    .select()
+    .single()
+  if (error) { console.error('[createProgram]', error); return null }
+  return data as Program
+}
+
+export async function assignWorkoutToProgram(
+  workoutId: string,
+  programId: string,
+  order: number,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('workouts')
+    .update({ program_id: programId, program_order: order })
+    .eq('id', workoutId)
+  return !error
+}
+
+export async function removeWorkoutFromProgram(workoutId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('workouts')
+    .update({ program_id: null, program_order: null })
+    .eq('id', workoutId)
+  return !error
+}
+
+export async function updateProgramStatus(programId: string, status: ProgramStatus): Promise<boolean> {
+  const { error } = await supabase
+    .from('programs')
+    .update({ status })
+    .eq('id', programId)
   return !error
 }

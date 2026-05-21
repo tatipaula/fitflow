@@ -11,12 +11,14 @@ import {
   checkInAthlete, getAthleteCheckins, getCheckinCountsByTrainer, updateAthleteSessionPackage,
   updateAthleteBilling, updateTrainerPixKey, updateTrainerProfile, uploadTrainerAvatar, isBillingDue,
   getAthleteRankingStats, getBadgesByTrainer, createBadge, deleteBadge,
+  getProgramsByAthlete, createProgram, assignWorkoutToProgram, removeWorkoutFromProgram,
+  getTrainerPrograms, confirmPayment, calcOverdueMonths,
 } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
 import { EXERCISE_LIBRARY } from '@/lib/exerciseLibrary'
-import type { Athlete, AthleteRankingStats, Badge, Workout, Exercise, Invite, ParqResponse, ClassCheckin } from '@/types'
+import type { Athlete, AthleteRankingStats, Badge, Program, ProgramWithWorkouts, Workout, Exercise, Invite, ParqResponse, ClassCheckin } from '@/types'
 
-type TrainerView = 'home' | 'athletes' | 'workouts' | 'recording' | 'processing' | 'review' | 'sent' | 'athlete-detail' | 'ranking' | 'trainer-perfil'
+type TrainerView = 'home' | 'athletes' | 'workouts' | 'recording' | 'processing' | 'review' | 'program-assign' | 'sent' | 'athlete-detail' | 'ranking' | 'trainer-perfil' | 'billing'
 
 const NAV_ITEMS: { key: TrainerView; label: string; icon: (c?: string) => JSX.Element }[] = [
   { key: 'home',          label: 'Dashboard', icon: (c = 'currentColor') => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
@@ -65,9 +67,6 @@ export default function DashboardPage() {
 
   // Athlete detail
   const [selectedAthleteForDetail, setSelectedAthleteForDetail] = useState<Athlete | null>(null)
-  const [athleteDetailMainWorkout, setAthleteDetailMainWorkout] = useState<Workout | null>(null)
-  const [athleteDetailOtherWorkouts, setAthleteDetailOtherWorkouts] = useState<Workout[]>([])
-  const [athleteDetailExercises, setAthleteDetailExercises] = useState<Exercise[]>([])
   const [athleteParq, setAthleteParq] = useState<ParqResponse | null | undefined>(undefined)
   const [loadingAthleteDetail, setLoadingAthleteDetail] = useState(false)
 
@@ -86,6 +85,8 @@ export default function DashboardPage() {
   const [assignFeedback, setAssignFeedback] = useState<string | null>(null)
 
   const [workouts, setWorkouts] = useState<Workout[]>([])
+  const [allPrograms, setAllPrograms] = useState<Program[]>([])
+  const [workoutSearch, setWorkoutSearch] = useState('')
   const [selectedAthleteId, setSelectedAthleteId] = useState('')
   const [workoutName, setWorkoutName] = useState('')
   const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio')
@@ -107,6 +108,8 @@ export default function DashboardPage() {
   const [billingEditId, setBillingEditId] = useState<string | null>(null)
   const [billingDay, setBillingDay] = useState('')
   const [billingAmount, setBillingAmount] = useState('')
+  const [billingFilter, setBillingFilter] = useState<'all' | 'pending' | 'paid'>('all')
+  const [confirmingPaymentId, setConfirmingPaymentId] = useState<string | null>(null)
 
   // Trainer Pix key
   const [pixKeyEdit, setPixKeyEdit] = useState(false)
@@ -135,6 +138,27 @@ export default function DashboardPage() {
   const [creatingBadge, setCreatingBadge] = useState(false)
   const [confirmDeleteBadgeId, setConfirmDeleteBadgeId] = useState<string | null>(null)
 
+  // Programs (pós-criação de treino)
+  const [programAssignWorkoutId, setProgramAssignWorkoutId] = useState<string | null>(null)
+  const [programAssignAthleteId, setProgramAssignAthleteId] = useState<string | null>(null)
+  const [athletePrograms, setAthletePrograms] = useState<ProgramWithWorkouts[]>([])
+  const [loadingAthletePrograms, setLoadingAthletePrograms] = useState(false)
+  const [newProgramName, setNewProgramName] = useState('')
+  const [newProgramWeeks, setNewProgramWeeks] = useState('4')
+  const [showNewProgramForm, setShowNewProgramForm] = useState(false)
+  const [savingProgram, setSavingProgram] = useState(false)
+
+  // Programs (athlete-detail)
+  const [athleteDetailPrograms, setAthleteDetailPrograms] = useState<ProgramWithWorkouts[]>([])
+  const [expandedProgramId, setExpandedProgramId] = useState<string | null>(null)
+  const [showNewProgramDetailForm, setShowNewProgramDetailForm] = useState(false)
+  const [newProgramDetailName, setNewProgramDetailName] = useState('')
+  const [newProgramDetailWeeks, setNewProgramDetailWeeks] = useState('4')
+  const [savingProgramDetail, setSavingProgramDetail] = useState(false)
+  const [movingWorkoutId, setMovingWorkoutId] = useState<string | null>(null)
+  const [athleteDetailExpandedWorkoutId, setAthleteDetailExpandedWorkoutId] = useState<string | null>(null)
+  const [athleteDetailWorkoutExercises, setAthleteDetailWorkoutExercises] = useState<Record<string, Exercise[]>>({})
+
   // Exercise library
   const [showLibrary, setShowLibrary] = useState(false)
   const [libraryGroup, setLibraryGroup] = useState('cardio')
@@ -156,8 +180,8 @@ export default function DashboardPage() {
     setTrainerPixKey(trainer.pix_key ?? null)
     setTrainerAvatarUrl(trainer.avatar_url ?? null)
     setTrainerProfileData({ name: trainer.name ?? '', phone: trainer.phone ?? '', bio: trainer.bio ?? '' })
-    Promise.all([getAthletes(trainer.id), getWorkouts(trainer.id), getCheckinCountsByTrainer(trainer.id), getBadgesByTrainer(trainer.id)])
-      .then(([a, w, counts, badges]) => { setAthletes(a); setWorkouts(w); setCheckinCounts(counts); setTrainerBadges(badges) })
+    Promise.all([getAthletes(trainer.id), getWorkouts(trainer.id), getCheckinCountsByTrainer(trainer.id), getBadgesByTrainer(trainer.id), getTrainerPrograms(trainer.id)])
+      .then(([a, w, counts, badges, progs]) => { setAthletes(a); setWorkouts(w); setCheckinCounts(counts); setTrainerBadges(badges); setAllPrograms(progs) })
       .catch(console.error)
       .finally(() => setLoadingData(false))
   }, [trainer])
@@ -202,24 +226,75 @@ export default function DashboardPage() {
 
   async function handleViewAthleteDetail(athlete: Athlete) {
     setSelectedAthleteForDetail(athlete)
-    setAthleteDetailExercises([])
     setAthleteParq(undefined)
+    setAthleteDetailPrograms([])
+    setExpandedProgramId(null)
+    setShowNewProgramDetailForm(false)
     setView('athlete-detail')
     setLoadingAthleteDetail(true)
-    const athleteWorkouts = workouts.filter((w) => w.athlete_id === athlete.id)
-    const mainWorkout = athleteWorkouts.find((w) => w.status === 'ready') ?? athleteWorkouts[0] ?? null
-    const otherWorkouts = athleteWorkouts.filter((w) => w.id !== mainWorkout?.id)
-    setAthleteDetailMainWorkout(mainWorkout)
-    setAthleteDetailOtherWorkouts(otherWorkouts)
-    const [exs, parq, checkins] = await Promise.all([
-      mainWorkout?.status === 'ready' ? getExercises(mainWorkout.id) : Promise.resolve([]),
+    const [parq, checkins, programs] = await Promise.all([
       getParqResponse(athlete.id),
       getAthleteCheckins(athlete.id),
+      getProgramsByAthlete(athlete.id),
     ])
-    setAthleteDetailExercises(exs)
     setAthleteParq(parq)
     setAthleteCheckins(checkins)
+    setAthleteDetailPrograms(programs)
     setLoadingAthleteDetail(false)
+  }
+
+  async function handleCreateProgramDetail() {
+    if (!selectedAthleteForDetail || !newProgramDetailName.trim() || !trainer) return
+    setSavingProgramDetail(true)
+    const program = await createProgram({
+      name: newProgramDetailName.trim(),
+      duration_weeks: parseInt(newProgramDetailWeeks) || 4,
+      athlete_id: selectedAthleteForDetail.id,
+    })
+    if (program) {
+      setAthleteDetailPrograms((p) => [{ ...program, workouts: [] }, ...p])
+      setAllPrograms((p) => [program, ...p])
+    }
+    setNewProgramDetailName('')
+    setNewProgramDetailWeeks('4')
+    setShowNewProgramDetailForm(false)
+    setSavingProgramDetail(false)
+  }
+
+  async function handleMoveWorkoutToProgram(workoutId: string, programId: string) {
+    if (!selectedAthleteForDetail) return
+    setMovingWorkoutId(workoutId)
+    const program = athleteDetailPrograms.find((p) => p.id === programId)
+    const nextOrder = program ? program.workouts.length : 0
+    const ok = await assignWorkoutToProgram(workoutId, programId, nextOrder)
+    if (ok) {
+      if (trainer) { const updated = await getWorkouts(trainer.id); setWorkouts(updated) }
+      const updatedPrograms = await getProgramsByAthlete(selectedAthleteForDetail.id)
+      setAthleteDetailPrograms(updatedPrograms)
+    }
+    setMovingWorkoutId(null)
+  }
+
+  async function handleRemoveWorkoutFromProgram(workoutId: string) {
+    if (!selectedAthleteForDetail) return
+    const ok = await removeWorkoutFromProgram(workoutId)
+    if (ok) {
+      if (trainer) { const updated = await getWorkouts(trainer.id); setWorkouts(updated) }
+      const updatedPrograms = await getProgramsByAthlete(selectedAthleteForDetail.id)
+      setAthleteDetailPrograms(updatedPrograms)
+    }
+  }
+
+  async function handleToggleAthleteDetailWorkout(w: Workout) {
+    if (athleteDetailExpandedWorkoutId === w.id) {
+      setAthleteDetailExpandedWorkoutId(null)
+      return
+    }
+    setAthleteDetailExpandedWorkoutId(w.id)
+    if (!athleteDetailWorkoutExercises[w.id]) {
+      const ex = await getExercises(w.id)
+      setAthleteDetailWorkoutExercises((prev) => ({ ...prev, [w.id]: ex }))
+    }
   }
 
   async function handleSendInviteEmail(invite: Invite, athlete: Athlete) {
@@ -369,6 +444,43 @@ export default function DashboardPage() {
   async function handleConfirmWorkout() {
     if (!processingWorkout) return
     supabase.functions.invoke('notify-athlete', { body: { workout_id: processingWorkout.id } })
+    const athleteId = processingWorkout.athlete_id
+    setProgramAssignWorkoutId(processingWorkout.id)
+    setProgramAssignAthleteId(athleteId)
+    setNewProgramName('')
+    setNewProgramWeeks('4')
+    setShowNewProgramForm(false)
+    setLoadingAthletePrograms(true)
+    setView('program-assign')
+    const programs = await getProgramsByAthlete(athleteId)
+    setAthletePrograms(programs)
+    setLoadingAthletePrograms(false)
+  }
+
+  async function handleAssignToExistingProgram(programId: string) {
+    if (!programAssignWorkoutId) return
+    setSavingProgram(true)
+    const program = athletePrograms.find((p) => p.id === programId)
+    const nextOrder = program ? program.workouts.length : 0
+    await assignWorkoutToProgram(programAssignWorkoutId, programId, nextOrder)
+    if (trainer) { const updated = await getWorkouts(trainer.id); setWorkouts(updated) }
+    setSavingProgram(false)
+    setView('sent')
+  }
+
+  async function handleCreateAndAssignProgram() {
+    if (!programAssignWorkoutId || !programAssignAthleteId || !newProgramName.trim()) return
+    setSavingProgram(true)
+    const program = await createProgram({
+      name: newProgramName.trim(),
+      duration_weeks: parseInt(newProgramWeeks) || 4,
+      athlete_id: programAssignAthleteId,
+    })
+    if (program) {
+      await assignWorkoutToProgram(programAssignWorkoutId, program.id, 0)
+      if (trainer) { const updated = await getWorkouts(trainer.id); setWorkouts(updated) }
+    }
+    setSavingProgram(false)
     setView('sent')
   }
 
@@ -404,6 +516,16 @@ export default function DashboardPage() {
       setSelectedAthleteForDetail((p) => p ? (p.id === athleteId ? { ...p, billing_day: day, billing_amount: amount } : p) : null)
     }
     setBillingEditId(null)
+  }
+
+  async function handleConfirmPaymentTrainer(athleteId: string, date?: string) {
+    setConfirmingPaymentId(athleteId)
+    const ok = await confirmPayment(athleteId, date)
+    if (ok) {
+      const paidAt = date ?? new Date().toISOString().split('T')[0]
+      setAthletes((p) => p.map((a) => a.id === athleteId ? { ...a, last_paid_at: paidAt } : a))
+    }
+    setConfirmingPaymentId(null)
   }
 
   async function handleSavePixKey() {
@@ -503,7 +625,7 @@ export default function DashboardPage() {
         })}
       </div>
       <div style={{ padding: '16px 0 8px', borderTop: '1px solid var(--ink-4)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button onClick={() => setView('athletes')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-md)', background: 'transparent', border: 'none', cursor: 'pointer', color: pendingBillingCount > 0 ? 'var(--accent)' : 'var(--fg-3)', fontSize: 13, width: '100%', textAlign: 'left' }}>
+        <button onClick={() => setView('billing')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-md)', background: view === 'billing' ? 'var(--accent-soft)' : 'transparent', border: 'none', cursor: 'pointer', color: view === 'billing' ? 'var(--accent)' : pendingBillingCount > 0 ? 'var(--accent)' : 'var(--fg-3)', fontSize: 13, width: '100%', textAlign: 'left' }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             {pendingBillingCount > 0 && (
@@ -527,7 +649,7 @@ export default function DashboardPage() {
 
   // ── Mobile header ─────────────────────────────────────────────────────────
   const bellButton = (
-    <button onClick={() => setView('athletes')} style={{ position: 'relative', width: 38, height: 38, borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+    <button onClick={() => setView('billing')} style={{ position: 'relative', width: 38, height: 38, borderRadius: 999, background: view === 'billing' ? 'var(--accent-soft)' : 'transparent', border: `1px solid ${view === 'billing' ? 'var(--accent)' : 'var(--ink-4)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fg-2)" strokeWidth="1.5" strokeLinecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
       {pendingBillingCount > 0 && (
         <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontFamily: "'JetBrains Mono', monospace" }}>
@@ -676,6 +798,174 @@ export default function DashboardPage() {
       </Card>
     </div>
   )
+
+  // ── BILLING VIEW ──────────────────────────────────────────────────────────
+  const billingView = (() => {
+    const configured = athletes.filter((a) => a.billing_day && a.billing_amount)
+    const today = new Date()
+    const todayYear = today.getFullYear()
+    const todayMonth = today.getMonth() + 1
+
+    function pad(n: number) { return String(n).padStart(2, '0') }
+
+    function calcOneMonthDate(a: typeof athletes[0]): string {
+      if (!a.billing_day) return new Date().toISOString().split('T')[0]
+      let sy: number, sm: number
+      if (a.last_paid_at) {
+        const [y, m] = a.last_paid_at.split('-').map(Number)
+        sm = m === 12 ? 1 : m + 1; sy = m === 12 ? y + 1 : y
+      } else {
+        const created = new Date(a.created_at)
+        sy = created.getFullYear(); sm = created.getMonth() + 1
+        if (created.getDate() > a.billing_day) { sm++; if (sm > 12) { sm = 1; sy++ } }
+      }
+      return `${sy}-${pad(sm)}-${pad(a.billing_day)}`
+    }
+
+    const withStatus = configured.map((a) => {
+      const due = isBillingDue(a)
+      const paidThisMonth = !due && !!a.last_paid_at && (() => {
+        const [y, m] = a.last_paid_at!.split('-').map(Number)
+        return y === todayYear && m === todayMonth
+      })()
+      const overdueMonths = due ? calcOverdueMonths(a) : 0
+      const oneMonthDate = due && overdueMonths > 1 ? calcOneMonthDate(a) : undefined
+      return { athlete: a, due, paidThisMonth, overdueMonths, oneMonthDate }
+    })
+
+    const filtered = withStatus.filter(({ due, paidThisMonth }) => {
+      if (billingFilter === 'pending') return due
+      if (billingFilter === 'paid') return paidThisMonth
+      return true
+    }).sort((a, b) => (b.overdueMonths - a.overdueMonths) || (b.due ? 1 : 0) - (a.due ? 1 : 0))
+
+    const pendingTotal = withStatus.filter((x) => x.due).reduce((s, x) => s + (x.athlete.billing_amount ?? 0) * x.overdueMonths, 0)
+
+    return (
+      <div style={contentStyle}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+          <div>
+            <div className="display" style={{ fontSize: isMobile ? 30 : 36 }}>Cobranças</div>
+            {pendingBillingCount > 0 && (
+              <div className="num" style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>
+                {pendingBillingCount} pendente{pendingBillingCount !== 1 ? 's' : ''} · R$ {pendingTotal.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+              </div>
+            )}
+          </div>
+          {!trainerPixKey && (
+            <button onClick={() => setView('trainer-perfil')}
+              style={{ height: 34, padding: '0 14px', borderRadius: 999, background: 'transparent', border: '1px solid #f59e0b', color: '#f59e0b', fontSize: 12, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              Configurar Pix
+            </button>
+          )}
+        </div>
+
+        {/* Filter chips */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          {(['all', 'pending', 'paid'] as const).map((f) => {
+            const label = f === 'all' ? 'Todos' : f === 'pending' ? 'Pendente' : 'Pago'
+            const active = billingFilter === f
+            return (
+              <button key={f} onClick={() => setBillingFilter(f)}
+                style={{ height: 32, padding: '0 14px', borderRadius: 999, fontSize: 12, fontWeight: active ? 600 : 400, background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--accent-ink)' : 'var(--fg-3)', border: `1px solid ${active ? 'var(--accent)' : 'var(--ink-4)'}`, cursor: 'pointer' }}>
+                {label}
+              </button>
+            )
+          })}
+        </div>
+
+        {configured.length === 0 ? (
+          <Card style={{ padding: '32px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: 14, color: 'var(--fg-3)', marginBottom: 16 }}>
+              Nenhum aluno tem cobrança configurada ainda.
+            </div>
+            <button onClick={() => setView('athletes')}
+              style={{ height: 38, padding: '0 18px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              Configurar em Alunos
+            </button>
+          </Card>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg-4)', fontSize: 14 }}>
+            Nenhum resultado para este filtro.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filtered.map(({ athlete: a, due, paidThisMonth, overdueMonths, oneMonthDate }) => {
+              const totalOwed = overdueMonths * (a.billing_amount ?? 0)
+              return (
+                <Card key={a.id} style={{ padding: 0, overflow: 'hidden', border: due ? `1px solid color-mix(in oklch, #f59e0b, black ${overdueMonths > 1 ? '30%' : '50%'})` : undefined }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px' }}>
+                    <KVAvatar name={a.name} size={38} src={a.avatar_url}/>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
+                        <span className="num" style={{ fontSize: 11, color: 'var(--accent)' }}>
+                          R$ {Number(a.billing_amount).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}/mês
+                        </span>
+                        <span style={{ fontSize: 10, color: 'var(--fg-4)' }}>·</span>
+                        <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+                          dia {a.billing_day}
+                        </span>
+                      </div>
+                      {due && overdueMonths > 1 && (
+                        <div style={{ marginTop: 5, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'color-mix(in oklch, #f59e0b, black 75%)', border: '1px solid color-mix(in oklch, #f59e0b, black 45%)', borderRadius: 6, padding: '2px 8px' }}>
+                          <span style={{ fontSize: 10, color: '#f59e0b', fontWeight: 700 }}>{overdueMonths} meses em aberto</span>
+                          <span style={{ fontSize: 10, color: 'var(--fg-4)' }}>·</span>
+                          <span className="num" style={{ fontSize: 10, color: '#f59e0b' }}>
+                            R$ {totalOwed.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} devidos
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                      {due ? (
+                        overdueMonths > 1 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                            <button
+                              onClick={() => handleConfirmPaymentTrainer(a.id)}
+                              disabled={confirmingPaymentId === a.id}
+                              style={{ height: 32, padding: '0 12px', borderRadius: 999, background: '#f59e0b', color: '#000', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', opacity: confirmingPaymentId === a.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                              {confirmingPaymentId === a.id ? '...' : `Quitar tudo (${overdueMonths}×)`}
+                            </button>
+                            <button
+                              onClick={() => handleConfirmPaymentTrainer(a.id, oneMonthDate!)}
+                              disabled={confirmingPaymentId === a.id}
+                              style={{ height: 28, padding: '0 12px', borderRadius: 999, background: 'transparent', color: '#f59e0b', border: '1px solid color-mix(in oklch, #f59e0b, black 40%)', fontSize: 11, cursor: 'pointer', opacity: confirmingPaymentId === a.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                              Só 1 mês
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleConfirmPaymentTrainer(a.id)}
+                            disabled={confirmingPaymentId === a.id}
+                            style={{ height: 34, padding: '0 14px', borderRadius: 999, background: '#f59e0b', color: '#000', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: confirmingPaymentId === a.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                            {confirmingPaymentId === a.id ? '...' : 'Confirmar'}
+                          </button>
+                        )
+                      ) : paidThisMonth ? (
+                        <span style={{ fontSize: 11, color: 'var(--success)', fontFamily: "'JetBrains Mono', monospace", display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ fontSize: 8 }}>●</span> Pago
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace" }}>
+                          Aguardando
+                        </span>
+                      )}
+                      {due && (
+                        <span style={{ fontSize: 9, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace" }}>
+                          ref. {today.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  })()
 
   // ── ATHLETES VIEW ─────────────────────────────────────────────────────────
   const filteredAthletes = athletes.filter((a) => {
@@ -879,7 +1169,7 @@ export default function DashboardPage() {
 
   const workoutsView = (
     <div style={contentStyle}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12 }}>
         <div className="display" style={{ fontSize: isMobile ? 30 : 36 }}>Treinos</div>
         <button onClick={() => setView('recording')}
           style={{ height: 42, padding: '0 18px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -887,13 +1177,44 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {workouts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg-4)', fontSize: 14 }}>Nenhum treino criado ainda.</div>
-      ) : (
+      {/* Search */}
+      <div style={{ position: 'relative', marginBottom: 20 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fg-4)" strokeWidth="1.8" strokeLinecap="round" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input
+          value={workoutSearch}
+          onChange={(e) => setWorkoutSearch(e.target.value)}
+          placeholder="Buscar por aluno ou treino…"
+          style={{ width: '100%', height: 40, paddingLeft: 36, paddingRight: 12, background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 999, fontSize: 13, color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box' }}
+        />
+      </div>
+
+      {(() => {
+        const q = workoutSearch.trim().toLowerCase()
+        const filtered = q
+          ? workouts.filter((w) => {
+              const athlete = athletes.find((a) => a.id === w.athlete_id)
+              return (
+                athlete?.name.toLowerCase().includes(q) ||
+                (w.name ?? '').toLowerCase().includes(q)
+              )
+            })
+          : workouts
+
+        if (filtered.length === 0) return (
+          <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg-4)', fontSize: 14 }}>
+            {workouts.length === 0 ? 'Nenhum treino criado ainda.' : 'Nenhum resultado para esta busca.'}
+          </div>
+        )
+
+        return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {workouts.map((w) => {
+          {filtered.map((w) => {
             const athlete = athletes.find((a) => a.id === w.athlete_id)
             const expanded = expandedWorkoutId === w.id
+            const prog = w.program_id ? allPrograms.find((p) => p.id === w.program_id) : null
+            const dayNum = prog && w.program_order != null ? w.program_order + 1 : null
             return (
               <Card key={w.id} style={{ padding: 0, overflow: 'hidden' }}>
                 {/* Confirm delete overlay */}
@@ -913,8 +1234,15 @@ export default function DashboardPage() {
                     <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {w.name ?? 'Treino sem nome'}
                     </div>
-                    <div className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginTop: 1 }}>
-                      {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                      <span className="num" style={{ fontSize: 10, color: 'var(--fg-3)' }}>
+                        {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                      {prog && (
+                        <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent)', background: 'var(--accent-soft)', borderRadius: 4, padding: '1px 6px', lineHeight: '16px' }}>
+                          {prog.name}{dayNum != null ? ` · D${dayNum}` : ''}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1045,7 +1373,8 @@ export default function DashboardPage() {
             )
           })}
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 
@@ -1273,6 +1602,98 @@ export default function DashboardPage() {
     </div>
   )
 
+  // ── PROGRAM-ASSIGN VIEW ───────────────────────────────────────────────────
+  const programAssignAthlete = athletes.find((a) => a.id === programAssignAthleteId)
+  const activeAndUpcomingPrograms = athletePrograms.filter((p) => p.status !== 'completed')
+
+  const programAssignView = (
+    <div style={{ ...contentStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+      <div style={{ width: '100%', maxWidth: 440 }}>
+        {/* Confirmação enviada */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </div>
+          <div className="display" style={{ fontSize: isMobile ? 24 : 30, marginBottom: 6 }}>Treino enviado!</div>
+          <div style={{ fontSize: 14, color: 'var(--fg-3)' }}>
+            Adicionar a um programa de <strong style={{ color: 'var(--fg-1)' }}>{programAssignAthlete?.name ?? 'atleta'}</strong>?
+          </div>
+        </div>
+
+        {loadingAthletePrograms ? (
+          <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg-3)', fontSize: 13 }}>Carregando programas...</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Programas existentes */}
+            {activeAndUpcomingPrograms.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Programas existentes
+                </div>
+                {activeAndUpcomingPrograms.map((p) => (
+                  <button key={p.id} onClick={() => handleAssignToExistingProgram(p.id)} disabled={savingProgram}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', cursor: savingProgram ? 'not-allowed' : 'pointer', textAlign: 'left', color: 'var(--fg-1)', opacity: savingProgram ? 0.6 : 1 }}
+                    onMouseEnter={(e) => { if (!savingProgram) e.currentTarget.style.borderColor = 'var(--accent)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--ink-4)' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 'var(--r-md)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
+                        {p.duration_weeks} semanas · {p.workouts.length} treino{p.workouts.length !== 1 ? 's' : ''}
+                        {' · '}<span style={{ color: p.status === 'active' ? 'var(--accent)' : 'var(--fg-4)' }}>{p.status === 'active' ? 'Ativo' : 'Próximo'}</span>
+                      </div>
+                    </div>
+                    {KVIcon.chevR(12, 'var(--fg-4)')}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Criar novo programa */}
+            {!showNewProgramForm ? (
+              <button onClick={() => setShowNewProgramForm(true)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'transparent', border: '1px dashed var(--ink-4)', borderRadius: 'var(--r-lg)', cursor: 'pointer', color: 'var(--fg-2)', fontSize: 14 }}>
+                {KVIcon.plus(16, 'var(--fg-3)')} Criar novo programa
+              </button>
+            ) : (
+              <div style={{ background: 'var(--ink-2)', border: '1px solid var(--accent)', borderRadius: 'var(--r-lg)', padding: '16px' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', marginBottom: 12 }}>Novo programa</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <input autoFocus value={newProgramName} onChange={(e) => setNewProgramName(e.target.value)}
+                    placeholder="Nome do programa (ex: Hipertrofia — Fase 1)"
+                    style={{ width: '100%', height: 44, padding: '0 14px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box' }}/>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Duração (semanas)</div>
+                    <input type="number" min="1" max="52" value={newProgramWeeks} onChange={(e) => setNewProgramWeeks(e.target.value)}
+                      style={{ width: '100%', height: 44, padding: '0 14px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box' }}/>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={handleCreateAndAssignProgram} disabled={!newProgramName.trim() || savingProgram}
+                      style={{ flex: 1, height: 42, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: !newProgramName.trim() || savingProgram ? 0.5 : 1 }}>
+                      {savingProgram ? 'Criando...' : 'Criar e adicionar'}
+                    </button>
+                    <button onClick={() => setShowNewProgramForm(false)}
+                      style={{ height: 42, padding: '0 14px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 13, cursor: 'pointer' }}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Agora não */}
+            <button onClick={() => setView('sent')}
+              style={{ width: '100%', height: 44, borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 14, cursor: 'pointer', marginTop: 4 }}>
+              Agora não
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
   // ── SENT VIEW ─────────────────────────────────────────────────────────────
   const sentView = (
     <div style={{ ...contentStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
@@ -1334,65 +1755,223 @@ export default function DashboardPage() {
         <LoadingSpinner size="md" message="Carregando..."/>
       ) : (
         <>
-          {/* Current workout */}
-          <div style={{ marginBottom: 24 }}>
-            <div className="eyebrow" style={{ marginBottom: 12 }}>Treinos</div>
-            {!athleteDetailMainWorkout ? (
-              <Card style={{ padding: '28px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: 14, color: 'var(--fg-3)', marginBottom: 16 }}>Nenhum treino criado para este aluno ainda.</div>
-                <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
-                  style={{ height: 42, padding: '0 20px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  {KVIcon.mic(16, 'var(--accent-ink)')} Criar treino para este aluno
-                </button>
-              </Card>
-            ) : (
-              <Card style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', borderBottom: athleteDetailExercises.length > 0 ? '1px solid var(--ink-4)' : 'none' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600 }}>{athleteDetailMainWorkout.name ?? 'Treino sem nome'}</div>
-                    <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
-                      {new Date(athleteDetailMainWorkout.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: athleteDetailMainWorkout.status === 'ready' ? 'var(--success)' : 'var(--fg-4)' }}/>
-                    <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>{athleteDetailMainWorkout.status === 'ready' ? 'Pronto' : athleteDetailMainWorkout.status}</span>
+          {/* Treinos + Programas — visão unificada */}
+          {(() => {
+            const allAthleteWorkouts = workouts.filter((w) => w.athlete_id === selectedAthleteForDetail.id)
+            const looseWorkouts = allAthleteWorkouts.filter((w) => !w.program_id)
+            const activePrograms = athleteDetailPrograms.filter((p) => p.status !== 'completed')
+            const sortedPrograms = [...athleteDetailPrograms].sort((a, b) => {
+              const ord = { active: 0, upcoming: 1, completed: 2 }
+              return (ord[a.status] ?? 9) - (ord[b.status] ?? 9)
+            })
+            const isEmpty = allAthleteWorkouts.length === 0 && athleteDetailPrograms.length === 0
+
+            return (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div className="eyebrow">Treinos</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => { setShowNewProgramDetailForm(true); setNewProgramDetailName(''); setNewProgramDetailWeeks('4') }}
+                      style={{ height: 30, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-2)', fontSize: 12, cursor: 'pointer' }}>
+                      + Programa
+                    </button>
+                    <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
+                      style={{ height: 30, padding: '0 12px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {KVIcon.mic(12, 'var(--accent-ink)')} Novo
+                    </button>
                   </div>
                 </div>
-                {athleteDetailExercises.length > 0 && (
-                  <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {athleteDetailExercises.map((ex, i) => (
-                      <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--ink-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--ink-4)' }}>
-                        <span className="num" style={{ fontSize: 9, color: 'var(--accent)', width: 16, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 500 }}>{ex.name}</div>
-                          <div className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginTop: 1 }}>
-                            {ex.sets}×{ex.reps}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''} · desc {ex.rest_seconds}s
-                          </div>
-                        </div>
+
+                {/* Formulário de novo programa */}
+                {showNewProgramDetailForm && (
+                  <Card style={{ padding: 16, marginBottom: 10, border: '1px solid var(--accent)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <input autoFocus value={newProgramDetailName} onChange={(e) => setNewProgramDetailName(e.target.value)}
+                        placeholder="Nome do programa"
+                        style={{ width: '100%', height: 44, padding: '0 14px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box' }}/>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <div style={{ fontSize: 12, color: 'var(--fg-3)', flexShrink: 0 }}>Semanas:</div>
+                        <input type="number" min="1" max="52" value={newProgramDetailWeeks} onChange={(e) => setNewProgramDetailWeeks(e.target.value)}
+                          style={{ width: 80, height: 38, padding: '0 10px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 14, color: 'var(--fg-1)', outline: 'none', textAlign: 'center' }}/>
                       </div>
-                    ))}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={handleCreateProgramDetail} disabled={!newProgramDetailName.trim() || savingProgramDetail}
+                          style={{ flex: 1, height: 38, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: !newProgramDetailName.trim() || savingProgramDetail ? 0.5 : 1 }}>
+                          {savingProgramDetail ? 'Criando...' : 'Criar'}
+                        </button>
+                        <button onClick={() => setShowNewProgramDetailForm(false)}
+                          style={{ height: 38, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 13, cursor: 'pointer' }}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {isEmpty ? (
+                  <Card style={{ padding: '28px 24px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 14, color: 'var(--fg-3)', marginBottom: 16 }}>Nenhum treino criado para este aluno ainda.</div>
+                    <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
+                      style={{ height: 42, padding: '0 20px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      {KVIcon.mic(16, 'var(--accent-ink)')} Criar primeiro treino
+                    </button>
+                  </Card>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+                    {/* Programas */}
+                    {sortedPrograms.map((prog) => {
+                      const isExpanded = expandedProgramId === prog.id
+                      const statusColor = prog.status === 'active' ? 'var(--accent)' : prog.status === 'completed' ? 'var(--success)' : 'var(--fg-4)'
+                      const statusLabel = prog.status === 'active' ? 'Ativo' : prog.status === 'completed' ? 'Concluído' : 'Próximo'
+                      return (
+                        <Card key={prog.id} style={{ padding: 0, overflow: 'hidden', border: prog.status === 'active' ? '1px solid color-mix(in oklch, var(--accent), black 50%)' : undefined }}>
+                          <button onClick={() => setExpandedProgramId(isExpanded ? null : prog.id)}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', color: 'var(--fg-1)', cursor: 'pointer', textAlign: 'left' }}>
+                            <div style={{ width: 32, height: 32, borderRadius: 'var(--r-md)', background: prog.status === 'active' ? 'var(--accent-soft)' : 'var(--ink-3)', border: `1px solid ${statusColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={statusColor} strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prog.name}</div>
+                              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
+                                {prog.duration_weeks} sem · {prog.workouts.length} treino{prog.workouts.length !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                              <span style={{ fontSize: 10, color: statusColor, fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em' }}>{statusLabel}</span>
+                              <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
+                                {KVIcon.chevR(12, isExpanded ? 'var(--accent)' : 'var(--fg-4)')}
+                              </div>
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div style={{ borderTop: '1px solid var(--ink-4)', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {prog.workouts.length === 0 ? (
+                                <div style={{ fontSize: 12, color: 'var(--fg-4)', padding: '6px 0' }}>Nenhum treino neste programa ainda.</div>
+                              ) : (
+                                prog.workouts.map((w, i) => {
+                                  const wExpanded = athleteDetailExpandedWorkoutId === w.id
+                                  const wExercises = athleteDetailWorkoutExercises[w.id]
+                                  return (
+                                    <div key={w.id} style={{ background: 'var(--ink-1)', borderRadius: 'var(--r-md)', border: `1px solid ${wExpanded ? 'var(--accent)' : 'var(--ink-4)'}`, overflow: 'hidden' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <button onClick={() => handleToggleAthleteDetailWorkout(w)}
+                                          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'none', border: 'none', color: 'var(--fg-1)', cursor: 'pointer', textAlign: 'left', minWidth: 0 }}>
+                                          <span className="num" style={{ fontSize: 9, color: 'var(--accent)', width: 20, textAlign: 'center', flexShrink: 0 }}>D{i + 1}</span>
+                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name ?? 'Treino sem nome'}</div>
+                                          </div>
+                                          <div style={{ width: 7, height: 7, borderRadius: '50%', background: w.status === 'ready' ? 'var(--success)' : 'var(--fg-4)', flexShrink: 0 }}/>
+                                          <div style={{ transform: wExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}>
+                                            {KVIcon.chevR(10, wExpanded ? 'var(--accent)' : 'var(--fg-4)')}
+                                          </div>
+                                        </button>
+                                        <button onClick={() => handleRemoveWorkoutFromProgram(w.id)} title="Remover do programa"
+                                          style={{ fontSize: 14, color: 'var(--fg-4)', background: 'none', border: 'none', borderLeft: '1px solid var(--ink-4)', cursor: 'pointer', padding: '8px 10px', flexShrink: 0, lineHeight: 1 }}>×</button>
+                                      </div>
+                                      {wExpanded && (
+                                        <div style={{ borderTop: '1px solid var(--ink-4)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                          {!wExercises ? (
+                                            <LoadingSpinner size="sm" message="Carregando exercícios…"/>
+                                          ) : wExercises.length === 0 ? (
+                                            <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>Sem exercícios cadastrados.</div>
+                                          ) : wExercises.map((ex, ei) => (
+                                            <div key={ex.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '4px 0' }}>
+                                              <span className="num" style={{ fontSize: 9, color: 'var(--fg-4)', width: 14, flexShrink: 0 }}>{ei + 1}</span>
+                                              <div style={{ flex: 1, minWidth: 0 }}>
+                                                <span style={{ fontSize: 12, fontWeight: 500 }}>{ex.name}</span>
+                                                <span className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginLeft: 6 }}>
+                                                  {ex.sets}×{ex.reps}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rest_seconds ? ` · ${ex.rest_seconds}s` : ''}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })
+                              )}
+                            </div>
+                          )}
+                        </Card>
+                      )
+                    })}
+
+                    {/* Treinos sem programa */}
+                    {looseWorkouts.length > 0 && (
+                      <>
+                        {sortedPrograms.length > 0 && (
+                          <div style={{ fontSize: 10, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', paddingTop: 4 }}>
+                            Sem programa
+                          </div>
+                        )}
+                        {looseWorkouts.map((w) => {
+                          const wExpanded = athleteDetailExpandedWorkoutId === w.id
+                          const wExercises = athleteDetailWorkoutExercises[w.id]
+                          return (
+                            <Card key={w.id} style={{ padding: 0, overflow: 'hidden', border: wExpanded ? '1px solid var(--accent)' : undefined }}>
+                              <button onClick={() => handleToggleAthleteDetailWorkout(w)}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'none', border: 'none', color: 'var(--fg-1)', cursor: 'pointer', textAlign: 'left' }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {w.name ?? 'Treino sem nome'}
+                                  </div>
+                                  <div className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginTop: 2 }}>
+                                    {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: w.status === 'ready' ? 'var(--success)' : 'var(--fg-4)' }}/>
+                                  <div style={{ transform: wExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+                                    {KVIcon.chevR(12, wExpanded ? 'var(--accent)' : 'var(--fg-4)')}
+                                  </div>
+                                </div>
+                              </button>
+                              {wExpanded && (
+                                <div style={{ borderTop: '1px solid var(--ink-4)', padding: '8px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  {!wExercises ? (
+                                    <LoadingSpinner size="sm" message="Carregando exercícios…"/>
+                                  ) : wExercises.length === 0 ? (
+                                    <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>Sem exercícios cadastrados.</div>
+                                  ) : wExercises.map((ex, ei) => (
+                                    <div key={ex.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '4px 0' }}>
+                                      <span className="num" style={{ fontSize: 9, color: 'var(--fg-4)', width: 14, flexShrink: 0 }}>{ei + 1}</span>
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <span style={{ fontSize: 12, fontWeight: 500 }}>{ex.name}</span>
+                                        <span className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginLeft: 6 }}>
+                                          {ex.sets}×{ex.reps}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rest_seconds ? ` · ${ex.rest_seconds}s` : ''}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {activePrograms.length > 0 && (
+                                <div style={{ borderTop: '1px solid var(--ink-4)', padding: '8px 14px' }}>
+                                  <select
+                                    key={w.id}
+                                    defaultValue=""
+                                    disabled={movingWorkoutId === w.id}
+                                    onChange={(e) => { if (e.target.value) handleMoveWorkoutToProgram(w.id, e.target.value) }}
+                                    style={{ height: 30, padding: '0 8px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--fg-2)', cursor: 'pointer', outline: 'none', width: '100%' }}>
+                                    <option value="" disabled>{movingWorkoutId === w.id ? 'Movendo...' : 'Adicionar a programa...'}</option>
+                                    {activePrograms.map((p) => (
+                                      <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                            </Card>
+                          )
+                        })}
+                      </>
+                    )}
                   </div>
                 )}
-              </Card>
-            )}
-            {athleteDetailOtherWorkouts.map((w) => (
-              <Card key={w.id} style={{ padding: 0, overflow: 'hidden', marginTop: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--fg-2)' }}>{w.name ?? 'Treino sem nome'}</div>
-                    <div className="num" style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
-                      {new Date(w.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: w.status === 'ready' ? 'var(--success)' : 'var(--fg-4)' }}/>
-                    <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>{w.status === 'ready' ? 'Pronto' : w.status}</span>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+              </div>
+            )
+          })()}
 
           {/* Perfil do atleta */}
           {(selectedAthleteForDetail.height_cm || selectedAthleteForDetail.weight_kg || selectedAthleteForDetail.birth_date) && (
@@ -2013,13 +2592,15 @@ export default function DashboardPage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {mobileHeader}
         {view === 'home'          && homeView}
+        {view === 'billing'       && billingView}
         {view === 'athletes'      && athletesView}
         {view === 'athlete-detail' && athleteDetailView}
         {view === 'workouts'      && workoutsView}
-        {view === 'recording'     && recordingView}
-        {view === 'processing'    && processingView}
-        {view === 'review'        && reviewView}
-        {view === 'sent'          && sentView}
+        {view === 'recording'       && recordingView}
+        {view === 'processing'      && processingView}
+        {view === 'review'          && reviewView}
+        {view === 'program-assign'  && programAssignView}
+        {view === 'sent'            && sentView}
         {view === 'ranking'       && rankingView}
         {view === 'trainer-perfil' && trainerPerfilView}
       </div>
