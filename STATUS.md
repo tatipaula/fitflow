@@ -1,6 +1,6 @@
 # Kinevia — Status
 
-## Última atualização: 2026-05-21
+## Última atualização: 2026-05-26
 
 ---
 
@@ -51,6 +51,22 @@
 - Tabela `badges` com RLS (migration aplicada)
 - Bucket `avatars` no Supabase Storage
 - Deploy em produção ✓
+
+### Sprint 10 — Fix de overflow mobile + PWA auto-update (sessão 19)
+
+#### Overflow horizontal no dashboard (iPhone)
+- Header mobile: `flexShrink: 0` no "Sair", `flexShrink: 1 + minWidth: 0` no "Novo Treino", `gap: 6 + minWidth: 0` no grupo direito
+- Grid de métricas: `repeat(3, minmax(0, 1fr))` + `minWidth: 0` nos cards
+- Revertido `max-width: 100vw` em `html/body` e root div que causava clipping bilateral no iOS PWA standalone
+- Deploy em produção ✓
+
+#### PWA auto-update no iOS
+- `src/sw.ts`: `skipWaiting()` no evento `install` + `clients.claim()` no `activate`
+- `src/main.tsx`: `reg.update()` na inicialização e em cada `visibilitychange` — iOS PWA não verifica SW updates automaticamente ao abrir pelo ícone
+- Removido `window.location.reload()` em `statechange === activated` que causava flash na instalação inicial
+- Deploy em produção ✓
+
+---
 
 ### Sprint 9 — Programas de treino + Módulo de cobranças (sessão 18)
 
