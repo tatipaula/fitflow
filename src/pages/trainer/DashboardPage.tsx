@@ -662,14 +662,14 @@ export default function DashboardPage() {
   const mobileHeader = isMobile && (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--ink-4)', background: 'var(--ink-1)', position: 'sticky', top: 0, zIndex: 40 }}>
       <KVWordmark size={14}/>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         {bellButton}
         <button onClick={() => setView('recording')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, height: 38, padding: '0 14px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, height: 38, padding: '0 10px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
           {KVIcon.mic(14, 'var(--accent-ink)')} Novo Treino
         </button>
         <button onClick={handleSignOut}
-          style={{ height: 38, padding: '0 12px', borderRadius: 999, background: 'transparent', color: 'var(--fg-1)', border: '1px solid var(--fg-2)', fontSize: 12, cursor: 'pointer', fontFamily: "'JetBrains Mono', monospace" }}>
+          style={{ height: 38, padding: '0 12px', borderRadius: 999, background: 'transparent', color: 'var(--fg-1)', border: '1px solid var(--fg-2)', fontSize: 12, cursor: 'pointer', fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>
           Sair
         </button>
       </div>
@@ -704,13 +704,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', gap: 14, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, minmax(0, 1fr))' : 'repeat(3, 1fr)', gap: 14, marginBottom: 28 }}>
         {[
           { icon: KVIcon.dumbbell, label: 'Alunos ativos', value: athletes.length },
           { icon: KVIcon.spark,    label: 'Treinos criados', value: workouts.length },
           { icon: KVIcon.flame,    label: 'Esta semana', value: workouts.filter((w) => (Date.now() - new Date(w.created_at).getTime()) < 7 * 86400000).length },
         ].map((s, i) => (
-          <Card key={i} style={{ padding: '18px 16px' }}>
+          <Card key={i} style={{ padding: '18px 16px', minWidth: 0 }}>
             <div style={{ color: 'var(--accent)', marginBottom: 10 }}>{s.icon(14, 'var(--accent)')}</div>
             <div className="display" style={{ fontSize: 32 }}>{s.value}</div>
             <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>{s.label}</div>
@@ -2587,7 +2587,7 @@ export default function DashboardPage() {
   )
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ink-0)' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ink-0)', maxWidth: '100vw', overflowX: 'hidden' }}>
       {sidebar}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {mobileHeader}

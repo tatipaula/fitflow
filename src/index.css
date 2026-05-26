@@ -31,6 +31,7 @@
   html, body {
     margin: 0;
     overflow-x: hidden;
+    max-width: 100vw;
     background: var(--ink-0);
     color: var(--fg-1);
     font-family: 'DM Sans', system-ui, sans-serif;
