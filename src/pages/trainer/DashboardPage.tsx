@@ -2587,7 +2587,7 @@ export default function DashboardPage() {
   )
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ink-0)', maxWidth: '100vw', overflowX: 'hidden' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ink-0)' }}>
       {sidebar}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {mobileHeader}
