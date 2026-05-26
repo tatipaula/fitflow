@@ -13,9 +13,9 @@ if ('serviceWorker' in navigator) {
 
     const skipIfWaiting = (sw: ServiceWorker) => {
       sw.addEventListener('statechange', (e) => {
-        const state = (e.target as ServiceWorker).state
-        if (state === 'installed') sw.postMessage({ type: 'SKIP_WAITING' })
-        if (state === 'activated') window.location.reload()
+        if ((e.target as ServiceWorker).state === 'installed') {
+          sw.postMessage({ type: 'SKIP_WAITING' })
+        }
       })
       if (sw.state === 'installed') sw.postMessage({ type: 'SKIP_WAITING' })
     }
