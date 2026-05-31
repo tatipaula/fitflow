@@ -1,6 +1,6 @@
 # Kinevia — Status
 
-## Última atualização: 2026-05-26
+## Última atualização: 2026-05-31
 
 ---
 
@@ -50,6 +50,20 @@
 - Campos `birth_date`, `height_cm`, `objective`, `avatar_url` em athletes (migration aplicada)
 - Tabela `badges` com RLS (migration aplicada)
 - Bucket `avatars` no Supabase Storage
+- Deploy em produção ✓
+
+### Sprint 12 — Troca de exercício no formulário de edição (sessão 20)
+- Campo "Exercício" adicionado ao form de edição em ambos os contextos (review + lista de workouts)
+- Autocomplete filtra a biblioteca de exercícios ao digitar (até 6 sugestões)
+- Aceita nome livre para exercícios fora da biblioteca
+- `UpdateExerciseInput` em `api.ts` recebe campo `name?` opcional
+- Deploy em produção ✓
+
+### Sprint 11 — Dados físicos no onboarding do atleta (sessão 20)
+- Step 3 adicionado ao `ConvitePage.tsx`: peso (kg), altura (cm) e data de nascimento
+- PAR-Q (step 2) avança para dados físicos antes de concluir o cadastro
+- `handleSubmit` salva conta + PAR-Q + dados físicos em sequência via `updateAthleteProfile`
+- `App.tsx`: processa `pending_parq_physical` do localStorage após confirmação de email
 - Deploy em produção ✓
 
 ### Sprint 10 — Fix de overflow mobile + PWA auto-update (sessão 19)
