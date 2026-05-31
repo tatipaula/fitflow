@@ -170,9 +170,10 @@ export default function DashboardPage() {
   const [editingName, setEditingName] = useState('')
   const [deletingWorkoutId, setDeletingWorkoutId] = useState<string | null>(null)
 
-  type ExerciseEditState = { sets: string; reps: string; weight_kg: string; rest_seconds: string; notes: string }
+  type ExerciseEditState = { name: string; sets: string; reps: string; weight_kg: string; rest_seconds: string; notes: string }
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null)
-  const [exerciseEdit, setExerciseEdit] = useState<ExerciseEditState>({ sets: '', reps: '', weight_kg: '', rest_seconds: '', notes: '' })
+  const [exerciseEdit, setExerciseEdit] = useState<ExerciseEditState>({ name: '', sets: '', reps: '', weight_kg: '', rest_seconds: '', notes: '' })
+  const [nameDropdownOpen, setNameDropdownOpen] = useState(false)
   const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -407,7 +408,9 @@ export default function DashboardPage() {
 
   function startEditExercise(ex: Exercise) {
     setEditingExerciseId(ex.id)
+    setNameDropdownOpen(false)
     setExerciseEdit({
+      name: ex.name,
       sets: String(ex.sets),
       reps: String(ex.reps),
       weight_kg: ex.weight_kg != null ? String(ex.weight_kg) : '',
@@ -417,7 +420,9 @@ export default function DashboardPage() {
   }
 
   async function handleSaveExercise(workoutId: string, exId: string) {
+    const nameVal = exerciseEdit.name.trim()
     const ok = await updateExercise(exId, {
+      ...(nameVal ? { name: nameVal } : {}),
       sets: parseInt(exerciseEdit.sets) || 1,
       reps: parseInt(exerciseEdit.reps) || 1,
       weight_kg: exerciseEdit.weight_kg ? parseFloat(exerciseEdit.weight_kg) : null,
@@ -426,6 +431,7 @@ export default function DashboardPage() {
     })
     if (ok) {
       const updated = {
+        ...(nameVal ? { name: nameVal } : {}),
         sets: parseInt(exerciseEdit.sets) || 1,
         reps: parseInt(exerciseEdit.reps) || 1,
         weight_kg: exerciseEdit.weight_kg ? parseFloat(exerciseEdit.weight_kg) : null,
@@ -1302,7 +1308,26 @@ export default function DashboardPage() {
                                   {/* Inline edit form */}
                                   {editingExerciseId === ex.id && (
                                     <div style={{ padding: '0 12px 12px', borderTop: '1px solid var(--ink-4)' }}>
-                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 10 }}>
+                                      <div style={{ marginTop: 10, position: 'relative' }}>
+                                        <div style={{ fontSize: 9, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Exercício</div>
+                                        <input type="text" value={exerciseEdit.name}
+                                          onChange={(e) => { setExerciseEdit((p) => ({ ...p, name: e.target.value })); setNameDropdownOpen(true) }}
+                                          onFocus={() => setNameDropdownOpen(true)}
+                                          onBlur={() => setTimeout(() => setNameDropdownOpen(false), 150)}
+                                          style={{ width: '100%', height: 34, padding: '0 8px', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--fg-1)', outline: 'none' }}/>
+                                        {nameSuggestions.length > 0 && (
+                                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', marginTop: 2, overflow: 'hidden' }}>
+                                            {nameSuggestions.map((name) => (
+                                              <button key={name} type="button"
+                                                onMouseDown={() => { setExerciseEdit((p) => ({ ...p, name })); setNameDropdownOpen(false) }}
+                                                style={{ width: '100%', height: 34, padding: '0 12px', background: 'transparent', border: 'none', color: 'var(--fg-1)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>
+                                                {name}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
                                         {[
                                           { label: 'Séries', key: 'sets' as const, type: 'number' },
                                           { label: 'Reps', key: 'reps' as const, type: 'number' },
@@ -1501,6 +1526,11 @@ export default function DashboardPage() {
   )
 
   // ── REVIEW VIEW ───────────────────────────────────────────────────────────
+  const allLibraryNames = EXERCISE_LIBRARY.flatMap((g) => g.exercises.map((e) => e.name))
+  const nameSuggestions = nameDropdownOpen
+    ? allLibraryNames.filter((n) => n.toLowerCase().includes(exerciseEdit.name.toLowerCase())).slice(0, 6)
+    : []
+
   const reviewAthleteObj = athletes.find((a) => a.id === selectedAthleteId) ?? athletes.find((a) => a.id === processingWorkout?.athlete_id)
 
   const reviewView = (
@@ -1558,7 +1588,26 @@ export default function DashboardPage() {
             {/* Edit form */}
             {editingExerciseId === ex.id && processingWorkout && (
               <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--ink-4)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 12 }}>
+                <div style={{ marginTop: 12, position: 'relative' }}>
+                  <div style={{ fontSize: 9, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Exercício</div>
+                  <input type="text" value={exerciseEdit.name}
+                    onChange={(e) => { setExerciseEdit((p) => ({ ...p, name: e.target.value })); setNameDropdownOpen(true) }}
+                    onFocus={() => setNameDropdownOpen(true)}
+                    onBlur={() => setTimeout(() => setNameDropdownOpen(false), 150)}
+                    style={{ width: '100%', height: 36, padding: '0 10px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--fg-1)', outline: 'none' }}/>
+                  {nameSuggestions.length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', marginTop: 2, overflow: 'hidden' }}>
+                      {nameSuggestions.map((name) => (
+                        <button key={name} type="button"
+                          onMouseDown={() => { setExerciseEdit((p) => ({ ...p, name })); setNameDropdownOpen(false) }}
+                          style={{ width: '100%', height: 34, padding: '0 12px', background: 'transparent', border: 'none', color: 'var(--fg-1)', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
                   {[
                     { label: 'Séries', key: 'sets' as const },
                     { label: 'Reps', key: 'reps' as const },
