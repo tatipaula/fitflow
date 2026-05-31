@@ -52,6 +52,11 @@
 - Bucket `avatars` no Supabase Storage
 - Deploy em produção ✓
 
+### Correções de infra — onboarding e emails (sessão 20)
+- **RESEND_API_KEY** atualizada nos secrets do Supabase (chave anterior revogada causava 500 em todas as edge functions de email)
+- **Confirmação de email desativada** no Supabase Auth — no fluxo de convite é desnecessária e causava perda do `pending_convite_token` no localStorage quando o redirect não apontava para `kinevia.com.br`
+- Fluxo de onboarding validado end-to-end: convite → step 1 (senha) → step 2 (PAR-Q) → step 3 (dados físicos) → atleta vinculado + dados salvos corretamente
+
 ### Sprint 14 — Lista de treinos limitada a 7 recentes (sessão 20)
 - Treinos soltos ordenados por data desc no detalhe do atleta
 - 7 mais recentes exibidos diretamente; restantes colapsados em "Anteriores (N)"
