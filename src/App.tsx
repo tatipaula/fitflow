@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
-import { linkAthleteAccount, linkAthleteByInviteToken, saveParqResponse } from '@/lib/api'
+import { linkAthleteAccount, linkAthleteByInviteToken, saveParqResponse, updateAthleteProfile } from '@/lib/api'
 import { registerPush } from '@/lib/push'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import LoginPage from '@/pages/auth/LoginPage'
@@ -38,6 +38,12 @@ export default function App() {
             await saveParqResponse(pendingParqAthleteId, JSON.parse(pendingParqAnswers))
             localStorage.removeItem('pending_parq_answers')
             localStorage.removeItem('pending_parq_athlete_id')
+          }
+
+          const pendingPhysical = localStorage.getItem('pending_parq_physical')
+          if (pendingPhysical && pendingParqAthleteId) {
+            await updateAthleteProfile(pendingParqAthleteId, JSON.parse(pendingPhysical))
+            localStorage.removeItem('pending_parq_physical')
           }
 
           initAuth(session.user.id)

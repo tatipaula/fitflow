@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { getInviteByToken, linkAthleteByInviteToken, saveParqResponse } from '@/lib/api'
+import { getInviteByToken, linkAthleteByInviteToken, saveParqResponse, updateAthleteProfile } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { KVLogo, KVButton } from '@/components/ui'
@@ -26,12 +26,16 @@ export default function ConvitePage() {
   const [loading, setLoading] = useState(true)
   const [invalid, setInvalid] = useState<'notfound' | 'expired' | 'used' | null>(null)
 
-  const [step, setStep] = useState<1 | 2>(1)
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
+
+  const [weightKg, setWeightKg] = useState('')
+  const [heightCm, setHeightCm] = useState('')
+  const [birthDate, setBirthDate] = useState('')
 
   const [parqAnswers, setParqAnswers] = useState<(boolean | null)[]>(Array(7).fill(null))
   const allParqAnswered = parqAnswers.every((a) => a !== null)
@@ -75,14 +79,21 @@ export default function ConvitePage() {
 
       const athleteId = invite.athletes.id
       const answers = parqAnswers as boolean[]
+      const physicalData = {
+        weight_kg: weightKg ? parseFloat(weightKg) : null,
+        height_cm: heightCm ? parseInt(heightCm, 10) : null,
+        birth_date: birthDate || null,
+      }
 
       if (data.session) {
         await linkAthleteByInviteToken(token)
         await saveParqResponse(athleteId, answers)
+        await updateAthleteProfile(athleteId, physicalData)
       } else {
         localStorage.setItem('pending_convite_token', token)
         localStorage.setItem('pending_parq_athlete_id', athleteId)
         localStorage.setItem('pending_parq_answers', JSON.stringify(answers))
+        localStorage.setItem('pending_parq_physical', JSON.stringify(physicalData))
         setEmailSent(true)
       }
     } catch {
@@ -155,7 +166,7 @@ export default function ConvitePage() {
 
           {/* Step indicator */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-            {[1, 2].map((s) => (
+            {[1, 2, 3].map((s) => (
               <div key={s} style={{ height: 3, flex: 1, borderRadius: 999, background: step >= s ? 'var(--accent)' : 'var(--ink-4)', transition: 'background 0.2s' }}/>
             ))}
           </div>
@@ -195,7 +206,7 @@ export default function ConvitePage() {
 
           {/* Step 2: PAR-Q */}
           {step === 2 && (
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               <div style={{ marginBottom: 20 }}>
                 <div className="display" style={{ fontSize: 24, marginBottom: 4 }}>PAR-Q</div>
                 <div style={{ fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.5 }}>
@@ -205,7 +216,7 @@ export default function ConvitePage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                 {PARQ_QUESTIONS.map((q, i) => (
-                  <div key={i} style={{ background: 'var(--ink-1)', border: `1px solid ${parqAnswers[i] === true ? 'var(--accent)' : parqAnswers[i] === false ? 'var(--ink-4)' : 'var(--ink-4)'}`, borderRadius: 'var(--r-md)', padding: '12px 14px' }}>
+                  <div key={i} style={{ background: 'var(--ink-1)', border: `1px solid ${parqAnswers[i] === true ? 'var(--accent)' : 'var(--ink-4)'}`, borderRadius: 'var(--r-md)', padding: '12px 14px' }}>
                     <div style={{ fontSize: 13, color: 'var(--fg-1)', marginBottom: 10, lineHeight: 1.5 }}>
                       <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--accent)', marginRight: 8 }}>{i + 1}</span>
                       {q}
@@ -233,9 +244,63 @@ export default function ConvitePage() {
 
               {anyParqYes && (
                 <div style={{ padding: '12px 14px', background: 'color-mix(in oklch, #f59e0b, black 70%)', borderRadius: 'var(--r-md)', fontSize: 13, color: '#f59e0b', marginBottom: 16, lineHeight: 1.5 }}>
-                  ⚠ Uma ou mais respostas indicam que você pode se beneficiar de uma avaliação médica antes de iniciar atividades físicas. Consulte um médico se necessário. Você ainda pode concluir o cadastro.
+                  ⚠ Uma ou mais respostas indicam que você pode se beneficiar de uma avaliação médica antes de iniciar atividades físicas. Consulte um médico se necessário. Você ainda pode continuar.
                 </div>
               )}
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" onClick={() => setStep(1)} style={{ height: 46, padding: '0 18px', borderRadius: 999, background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--ink-4)', fontSize: 14, cursor: 'pointer', flexShrink: 0 }}>
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  disabled={!allParqAnswered}
+                  onClick={() => setStep(3)}
+                  style={{ flex: 1, height: 46, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: !allParqAnswered ? 0.5 : 1 }}>
+                  Continuar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Physical data */}
+          {step === 3 && (
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              <div style={{ marginBottom: 20 }}>
+                <div className="display" style={{ fontSize: 24, marginBottom: 4 }}>Dados físicos</div>
+                <div style={{ fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.5 }}>
+                  Ajuda o personal a personalizar seus treinos.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={lbl}>Peso (kg)</label>
+                    <input
+                      type="number" inputMode="decimal" min="30" max="300" step="0.1"
+                      required value={weightKg} onChange={(e) => setWeightKg(e.target.value)}
+                      placeholder="75" style={inp}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={lbl}>Altura (cm)</label>
+                    <input
+                      type="number" inputMode="numeric" min="100" max="250"
+                      required value={heightCm} onChange={(e) => setHeightCm(e.target.value)}
+                      placeholder="175" style={inp}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={lbl}>Data de nascimento</label>
+                  <input
+                    type="date" required value={birthDate} onChange={(e) => setBirthDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    style={inp}
+                  />
+                </div>
+              </div>
 
               {error && (
                 <div style={{ padding: '10px 14px', background: 'color-mix(in oklch, var(--danger), black 70%)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--danger)', marginBottom: 12 }}>
@@ -244,10 +309,10 @@ export default function ConvitePage() {
               )}
 
               <div style={{ display: 'flex', gap: 10 }}>
-                <button type="button" onClick={() => setStep(1)} style={{ height: 46, padding: '0 18px', borderRadius: 999, background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--ink-4)', fontSize: 14, cursor: 'pointer', flexShrink: 0 }}>
+                <button type="button" onClick={() => setStep(2)} style={{ height: 46, padding: '0 18px', borderRadius: 999, background: 'transparent', color: 'var(--fg-2)', border: '1px solid var(--ink-4)', fontSize: 14, cursor: 'pointer', flexShrink: 0 }}>
                   Voltar
                 </button>
-                <KVButton type="submit" variant="primary" size="lg" disabled={!allParqAnswered || submitting} style={{ flex: 1, justifyContent: 'center' }}>
+                <KVButton type="submit" variant="primary" size="lg" disabled={submitting} style={{ flex: 1, justifyContent: 'center' }}>
                   {submitting ? 'Aguarde...' : 'Concluir cadastro'}
                 </KVButton>
               </div>
