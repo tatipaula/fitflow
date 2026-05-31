@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -12,8 +13,9 @@ import {
   updateAthleteBilling, updateTrainerPixKey, updateTrainerProfile, uploadTrainerAvatar, isBillingDue,
   getAthleteRankingStats, getBadgesByTrainer, createBadge, deleteBadge,
   getProgramsByAthlete, createProgram, assignWorkoutToProgram, removeWorkoutFromProgram,
-  getTrainerPrograms, confirmPayment, calcOverdueMonths,
+  getTrainerPrograms, confirmPayment, calcOverdueMonths, getAthleteEvolution,
 } from '@/lib/api'
+import type { AthleteEvolution } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
 import { EXERCISE_LIBRARY } from '@/lib/exerciseLibrary'
 import type { Athlete, AthleteRankingStats, Badge, Program, ProgramWithWorkouts, Workout, Exercise, Invite, ParqResponse, ClassCheckin } from '@/types'
@@ -159,6 +161,11 @@ export default function DashboardPage() {
   const [athleteDetailExpandedWorkoutId, setAthleteDetailExpandedWorkoutId] = useState<string | null>(null)
   const [athleteDetailWorkoutExercises, setAthleteDetailWorkoutExercises] = useState<Record<string, Exercise[]>>({})
 
+  // Evolution
+  const [evolutionData, setEvolutionData] = useState<AthleteEvolution | null>(null)
+  const [loadingEvolution, setLoadingEvolution] = useState(false)
+  const [selectedExerciseName, setSelectedExerciseName] = useState<string>('')
+
   // Exercise library
   const [showLibrary, setShowLibrary] = useState(false)
   const [libraryGroup, setLibraryGroup] = useState('cardio')
@@ -231,17 +238,24 @@ export default function DashboardPage() {
     setAthleteDetailPrograms([])
     setExpandedProgramId(null)
     setShowNewProgramDetailForm(false)
+    setEvolutionData(null)
+    setSelectedExerciseName('')
     setView('athlete-detail')
     setLoadingAthleteDetail(true)
-    const [parq, checkins, programs] = await Promise.all([
+    setLoadingEvolution(true)
+    const [parq, checkins, programs, evolution] = await Promise.all([
       getParqResponse(athlete.id),
       getAthleteCheckins(athlete.id),
       getProgramsByAthlete(athlete.id),
+      getAthleteEvolution(athlete.id),
     ])
     setAthleteParq(parq)
     setAthleteCheckins(checkins)
     setAthleteDetailPrograms(programs)
+    setEvolutionData(evolution)
+    setSelectedExerciseName(evolution.exercises[0]?.name ?? '')
     setLoadingAthleteDetail(false)
+    setLoadingEvolution(false)
   }
 
   async function handleCreateProgramDetail() {
@@ -2262,6 +2276,89 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </Card>
+            )}
+          </div>
+
+          {/* Evolução */}
+          <div style={{ marginTop: 32 }}>
+            <div className="eyebrow" style={{ marginBottom: 16 }}>Evolução</div>
+
+            {loadingEvolution ? (
+              <LoadingSpinner size="sm" message="Carregando dados..."/>
+            ) : !evolutionData || (evolutionData.exercises.length === 0 && evolutionData.weekly.every((w) => w.sessions === 0)) ? (
+              <Card style={{ padding: '24px 18px', textAlign: 'center' }}>
+                <div style={{ fontSize: 13, color: 'var(--fg-4)' }}>Nenhuma sessão registrada ainda.</div>
+              </Card>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                {/* Progressão de carga */}
+                {evolutionData.exercises.length > 0 && (() => {
+                  const selected = evolutionData.exercises.find((e) => e.name === selectedExerciseName) ?? evolutionData.exercises[0]
+                  return (
+                    <Card style={{ padding: '16px 18px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>Progressão de carga</div>
+                        <select
+                          value={selectedExerciseName}
+                          onChange={(e) => setSelectedExerciseName(e.target.value)}
+                          style={{ height: 32, padding: '0 10px', background: 'var(--ink-1)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--fg-1)', outline: 'none', maxWidth: 200 }}>
+                          {evolutionData.exercises.map((ex) => (
+                            <option key={ex.name} value={ex.name}>{ex.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <ResponsiveContainer width="100%" height={160}>
+                        <LineChart data={selected.points} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--fg-4)' }} tickLine={false} axisLine={false} interval="preserveStartEnd"/>
+                          <YAxis tick={{ fontSize: 10, fill: 'var(--fg-4)' }} tickLine={false} axisLine={false} unit="kg"/>
+                          <Tooltip
+                            contentStyle={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 8, fontSize: 12 }}
+                            labelStyle={{ color: 'var(--fg-3)' }}
+                            formatter={(v: number) => [`${v} kg`, 'Carga máx.']}
+                          />
+                          <Line type="monotone" dataKey="weight" stroke="var(--accent)" strokeWidth={2} dot={{ fill: 'var(--accent)', r: 3 }} activeDot={{ r: 5 }}/>
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  )
+                })()}
+
+                {/* Frequência semanal */}
+                <Card style={{ padding: '16px 18px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Frequência semanal</div>
+                  <ResponsiveContainer width="100%" height={120}>
+                    <BarChart data={evolutionData.weekly} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barSize={14}>
+                      <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--fg-4)' }} tickLine={false} axisLine={false} interval={2}/>
+                      <YAxis tick={{ fontSize: 10, fill: 'var(--fg-4)' }} tickLine={false} axisLine={false} allowDecimals={false}/>
+                      <Tooltip
+                        contentStyle={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 8, fontSize: 12 }}
+                        labelStyle={{ color: 'var(--fg-3)' }}
+                        formatter={(v: number) => [v, 'sessões']}
+                      />
+                      <Bar dataKey="sessions" fill="var(--accent)" radius={[3, 3, 0, 0]} fillOpacity={0.85}/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                {/* Volume mensal */}
+                <Card style={{ padding: '16px 18px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Volume mensal <span style={{ fontSize: 11, color: 'var(--fg-4)', fontWeight: 400 }}>(séries × reps × kg)</span></div>
+                  <ResponsiveContainer width="100%" height={120}>
+                    <BarChart data={evolutionData.monthly} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barSize={28}>
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--fg-4)' }} tickLine={false} axisLine={false}/>
+                      <YAxis tick={{ fontSize: 10, fill: 'var(--fg-4)' }} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}/>
+                      <Tooltip
+                        contentStyle={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 8, fontSize: 12 }}
+                        labelStyle={{ color: 'var(--fg-3)' }}
+                        formatter={(v: number) => [`${v.toLocaleString('pt-BR')} kg`, 'Volume']}
+                      />
+                      <Bar dataKey="volume" fill="var(--accent)" radius={[3, 3, 0, 0]} fillOpacity={0.6}/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+
+              </div>
             )}
           </div>
         </>

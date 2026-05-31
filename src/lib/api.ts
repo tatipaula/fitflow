@@ -387,6 +387,90 @@ export async function updateExercise(id: string, input: UpdateExerciseInput): Pr
   return !error
 }
 
+// ─── Evolution ────────────────────────────────────────────────────────────────
+
+export interface EvolutionPoint { date: string; weight: number }
+export interface ExerciseEvolution { name: string; points: EvolutionPoint[] }
+export interface AthleteEvolution {
+  exercises: ExerciseEvolution[]
+  weekly: { label: string; sessions: number }[]
+  monthly: { label: string; volume: number }[]
+}
+
+export async function getAthleteEvolution(athleteId: string): Promise<AthleteEvolution> {
+  type RawLog = { reps_done: number; weight_kg: number | null; exercises: { name: string } | null }
+  type RawSession = { id: string; completed_at: string; set_logs: RawLog[] }
+
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('id, completed_at, set_logs(reps_done, weight_kg, exercises(name))')
+    .eq('athlete_id', athleteId)
+    .not('completed_at', 'is', null)
+    .order('completed_at', { ascending: true })
+
+  if (error || !data) return { exercises: [], weekly: [], monthly: [] }
+  const sessions = data as unknown as RawSession[]
+
+  // Progressão de carga por exercício
+  const exMap: Record<string, EvolutionPoint[]> = {}
+  for (const s of sessions) {
+    const d = new Date(s.completed_at)
+    const label = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+    const maxByEx: Record<string, number> = {}
+    for (const log of s.set_logs) {
+      if (!log.exercises?.name || !log.weight_kg || log.weight_kg <= 0) continue
+      const n = log.exercises.name
+      maxByEx[n] = Math.max(maxByEx[n] ?? 0, log.weight_kg)
+    }
+    for (const [name, weight] of Object.entries(maxByEx)) {
+      if (!exMap[name]) exMap[name] = []
+      exMap[name].push({ date: label, weight })
+    }
+  }
+  const exercises = Object.entries(exMap)
+    .filter(([, pts]) => pts.length >= 2)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 10)
+    .map(([name, points]) => ({ name, points }))
+
+  // Frequência semanal (últimas 12 semanas)
+  const now = new Date()
+  const weekly: { label: string; sessions: number }[] = []
+  for (let i = 11; i >= 0; i--) {
+    const weekStart = new Date(now)
+    weekStart.setDate(now.getDate() - now.getDay() - i * 7)
+    weekStart.setHours(0, 0, 0, 0)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 7)
+    const count = sessions.filter((s) => {
+      const d = new Date(s.completed_at); return d >= weekStart && d < weekEnd
+    }).length
+    weekly.push({
+      label: `${String(weekStart.getDate()).padStart(2, '0')}/${String(weekStart.getMonth() + 1).padStart(2, '0')}`,
+      sessions: count,
+    })
+  }
+
+  // Volume mensal (últimos 6 meses)
+  const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+  const monthly: { label: string; volume: number }[] = []
+  for (let i = 5; i >= 0; i--) {
+    const ref = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    let volume = 0
+    for (const s of sessions) {
+      const sd = new Date(s.completed_at)
+      if (sd.getFullYear() === ref.getFullYear() && sd.getMonth() === ref.getMonth()) {
+        for (const log of s.set_logs) {
+          if (log.weight_kg && log.weight_kg > 0) volume += log.reps_done * log.weight_kg
+        }
+      }
+    }
+    monthly.push({ label: MONTHS_PT[ref.getMonth()], volume: Math.round(volume) })
+  }
+
+  return { exercises, weekly, monthly }
+}
+
 /**
  * Retorna a última carga usada por exercício para um atleta.
  * Chave: nome do exercício normalizado (lowercase trim).
