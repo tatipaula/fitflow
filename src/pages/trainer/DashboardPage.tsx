@@ -161,6 +161,8 @@ export default function DashboardPage() {
   const [athleteDetailExpandedWorkoutId, setAthleteDetailExpandedWorkoutId] = useState<string | null>(null)
   const [athleteDetailWorkoutExercises, setAthleteDetailWorkoutExercises] = useState<Record<string, Exercise[]>>({})
 
+  const [showOlderWorkouts, setShowOlderWorkouts] = useState(false)
+
   // Evolution
   const [evolutionData, setEvolutionData] = useState<AthleteEvolution | null>(null)
   const [loadingEvolution, setLoadingEvolution] = useState(false)
@@ -1962,14 +1964,11 @@ export default function DashboardPage() {
                     })}
 
                     {/* Treinos sem programa */}
-                    {looseWorkouts.length > 0 && (
-                      <>
-                        {sortedPrograms.length > 0 && (
-                          <div style={{ fontSize: 10, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', paddingTop: 4 }}>
-                            Sem programa
-                          </div>
-                        )}
-                        {looseWorkouts.map((w) => {
+                    {looseWorkouts.length > 0 && (() => {
+                      const sorted = [...looseWorkouts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                      const recent = sorted.slice(0, 7)
+                      const older  = sorted.slice(7)
+                      const renderWorkout = (w: typeof looseWorkouts[0]) => {
                           const wExpanded = athleteDetailExpandedWorkoutId === w.id
                           const wExercises = athleteDetailWorkoutExercises[w.id]
                           return (
@@ -2027,9 +2026,29 @@ export default function DashboardPage() {
                               )}
                             </Card>
                           )
-                        })}
-                      </>
-                    )}
+                        }
+                      return (
+                        <>
+                          {sortedPrograms.length > 0 && (
+                            <div style={{ fontSize: 10, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', paddingTop: 4 }}>
+                              Sem programa
+                            </div>
+                          )}
+                          {recent.map(renderWorkout)}
+                          {older.length > 0 && (
+                            <>
+                              <button
+                                onClick={() => setShowOlderWorkouts((p) => !p)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer', alignSelf: 'flex-start' }}>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ transform: showOlderWorkouts ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}><path d="M6 9l6 6 6-6"/></svg>
+                                {showOlderWorkouts ? 'Ocultar anteriores' : `Anteriores (${older.length})`}
+                              </button>
+                              {showOlderWorkouts && older.map(renderWorkout)}
+                            </>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
