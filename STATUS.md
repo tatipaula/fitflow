@@ -52,6 +52,12 @@
 - Bucket `avatars` no Supabase Storage
 - Deploy em produção ✓
 
+### Sprint 14 — Lista de treinos limitada a 7 recentes (sessão 20)
+- Treinos soltos ordenados por data desc no detalhe do atleta
+- 7 mais recentes exibidos diretamente; restantes colapsados em "Anteriores (N)"
+- Botão expansível com chevron animado
+- Deploy em produção ✓
+
 ### Sprint 13 — Dashboard de evolução do atleta (sessão 20)
 - Nova seção "Evolução" no detalhe do atleta (carregada em paralelo ao abrir)
 - Gráfico 1: progressão de carga por exercício (line chart, top 10, mínimo 2 pontos)
