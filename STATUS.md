@@ -1,6 +1,6 @@
 # Kinevia — Status
 
-## Última atualização: 2026-05-31
+## Última atualização: 2026-05-31 (sessão 20)
 
 ---
 
@@ -50,6 +50,15 @@
 - Campos `birth_date`, `height_cm`, `objective`, `avatar_url` em athletes (migration aplicada)
 - Tabela `badges` com RLS (migration aplicada)
 - Bucket `avatars` no Supabase Storage
+- Deploy em produção ✓
+
+### Sprint 13 — Dashboard de evolução do atleta (sessão 20)
+- Nova seção "Evolução" no detalhe do atleta (carregada em paralelo ao abrir)
+- Gráfico 1: progressão de carga por exercício (line chart, top 10, mínimo 2 pontos)
+- Gráfico 2: frequência semanal de sessões (bar chart, últimas 12 semanas)
+- Gráfico 3: volume mensal acumulado (bar chart, últimos 6 meses, séries×reps×kg)
+- `getAthleteEvolution` em `api.ts` processa tudo em uma query com join sessions→set_logs→exercises
+- Recharts importado no DashboardPage pela primeira vez
 - Deploy em produção ✓
 
 ### Sprint 12 — Troca de exercício no formulário de edição (sessão 20)
