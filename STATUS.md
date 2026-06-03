@@ -1,10 +1,47 @@
 # Kinevia — Status
 
-## Última atualização: 2026-05-31 (sessão 20)
+## Última atualização: 2026-06-03 (sessão 21)
 
 ---
 
 ## Concluído
+
+### Sessão 21 — CREF, bi-set/tri-set, biblioteca expandida e UX do dashboard
+
+#### CREF do personal trainer
+- Campo `cref text` adicionado à tabela `trainers` (migration `20260603000001_trainer_cref.sql`)
+- Tipo `Trainer` atualizado em `src/types/index.ts`
+- `updateTrainerProfile` em `api.ts` aceita o campo `cref`
+- Formulário de perfil do trainer: campo CREF editável (acima do telefone), exibido na visualização
+- Aluno: card "Meu Personal" na aba Perfil exibe avatar, nome, CREF, telefone e bio do personal
+- Trainer sempre carregado no `WorkoutPage` (não só quando há cobrança pendente)
+- Deploy em produção ✓
+
+#### Suporte a bi-set, tri-set, circuito e drop-set
+- Colunas `group_id integer` e `method text` adicionadas à tabela `exercises` (migration `20260603000002_exercise_groups.sql`)
+- Tipo `ExerciseMethod` e campos `group_id`, `method` adicionados à interface `Exercise`
+- Edge function `parse-workout` atualizada: IA detecta agrupamentos por palavras-chave ("biset", "triset", "circuito", "dropset", "supersérie") e retorna `group_id` e `method`
+- **Trainer — revisão do treino**: exercícios agrupados exibidos em container accent com badge (BI-SET, TRI-SET, CIRCUITO, DROP-SET); exercícios isolados sem alteração
+- **Atleta — execução**: exercícios do grupo rendem visualmente com badge e letras A/B/C; lógica de `handleLogSet` corrigida — sem descanso entre exercícios do grupo, descanso apenas ao fim da rodada completa
+- Deploy edge function + frontend em produção ✓
+
+#### Biblioteca de exercícios expandida
+- Grupos expandidos de ~8 para ~20 exercícios cada
+- Total: de ~80 para ~200 exercícios
+- Novo grupo **Glúteos** (20 exercícios): hip thrust, abdução, clamshell, monster walk, step up, etc.
+- Cardio: battle rope, kettlebell swing, assault bike, shadowboxing, agility ladder e mais
+- Costas: barra fixa, chin-up, T-bar, remada inversa, serrote, good morning
+- Core: ab rollout, pallof press, dragon flag, hollow body, V-sit, windmill
+- `CARDIO_EXERCISE_NAMES` atualizado para o parser da IA reconhecer os novos exercícios
+- Deploy em produção ✓
+
+#### UX — alunos clicáveis no dashboard (home)
+- Cards de alunos na seção "Alunos" da home agora são clicáveis e abrem o detalhe do aluno
+- Seta `>` adicionada ao lado direito de cada card indicando navegabilidade
+- Botão "Ver todos" com destaque visual (fundo accent-soft, borda e texto accent)
+- Deploy em produção ✓
+
+---
 
 ### Sprint 1 — Check-in e pacote de aulas
 - Tabela `class_checkins` criada (migration aplicada)
