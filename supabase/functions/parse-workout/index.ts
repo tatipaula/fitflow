@@ -18,17 +18,29 @@ Formato obrigatório:
       "weight_kg": <peso em kg como número decimal, ou null se não mencionado>,
       "rest_seconds": <descanso em segundos, inteiro>,
       "notes": "<observações ou null>",
-      "youtube_video_id": null
+      "youtube_video_id": null,
+      "group_id": <inteiro identificando o grupo, ou null se exercício isolado>,
+      "method": <"biset" | "triset" | "circuit" | "dropset" | null>
     }
   ]
 }
 
-Regras:
+Regras gerais:
 - Se um valor não for mencionado, use defaults: sets=3, reps=10, rest_seconds=60
 - weight_kg deve ser null se o peso não for mencionado explicitamente
 - notes deve ser null se não houver observação
 - youtube_video_id sempre null (será preenchido depois)
-- Retorne APENAS o JSON, sem texto antes ou depois`
+
+Regras para métodos de agrupamento:
+- "biset", "bi-set", "supersérie", "superset" com 2 exercícios → mesmo group_id inteiro, method="biset"
+- "triset", "tri-set" com 3 exercícios → mesmo group_id inteiro, method="triset"
+- "circuito" com vários exercícios → mesmo group_id inteiro, method="circuit"
+- "dropset", "drop-set", "série decrescente", "série descendente" → group_id único, method="dropset"
+- Exercícios isolados (sem método especificado) → group_id=null, method=null
+- Grupos diferentes usam group_id diferentes: 0, 1, 2... em ordem crescente
+- rest_seconds para exercícios em grupo = descanso APÓS completar uma rodada completa do grupo
+
+Retorne APENAS o JSON, sem texto antes ou depois`
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -68,7 +80,6 @@ Deno.serve(async (req) => {
 
     if (!content) throw new Error('Resposta vazia do Claude')
 
-    // Extrair JSON da resposta (Claude pode retornar texto extra em alguns casos)
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('Claude não retornou JSON válido')
 

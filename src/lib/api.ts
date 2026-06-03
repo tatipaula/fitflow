@@ -701,7 +701,7 @@ export async function updateTrainerPixKey(pixKey: string): Promise<boolean> {
 }
 
 export async function updateTrainerProfile(
-  data: Partial<Pick<import('@/types').Trainer, 'name' | 'phone' | 'bio' | 'avatar_url'>>,
+  data: Partial<Pick<import('@/types').Trainer, 'name' | 'phone' | 'bio' | 'avatar_url' | 'cref'>>,
 ): Promise<boolean> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) return false

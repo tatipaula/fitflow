@@ -17,6 +17,7 @@ export interface Trainer {
   phone: string | null
   bio: string | null
   avatar_url: string | null
+  cref: string | null
   stripe_customer_id: string | null
   plan: UserPlan
   pix_key: string | null
@@ -129,6 +130,8 @@ export interface Workout {
   created_at: string
 }
 
+export type ExerciseMethod = 'biset' | 'triset' | 'circuit' | 'dropset'
+
 export interface Exercise {
   id: string
   workout_id: string
@@ -140,6 +143,8 @@ export interface Exercise {
   notes: string | null
   youtube_video_id: string | null
   order_index: number
+  group_id: number | null
+  method: ExerciseMethod | null
 }
 
 export interface Session {

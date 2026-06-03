@@ -37,6 +37,7 @@ export default function WorkoutPage() {
   const [tab, setTab] = useState<AthleteTab>('treinos')
   const [sessions, setSessions] = useState<SessionWithLogs[]>([])
 
+  const [athleteTrainer, setAthleteTrainer] = useState<Trainer | null>(null)
   const [trainerForBilling, setTrainerForBilling] = useState<Trainer | null>(null)
   const [billingAthlete, setBillingAthlete] = useState<Athlete | null>(null)
   const [billingPaid, setBillingPaid] = useState(false)
@@ -84,9 +85,10 @@ export default function WorkoutPage() {
       setAthleteBadges(badges)
       setRankingPosition(rankPos)
       setActiveProgram(programs.find((p) => p.status === 'active') ?? null)
+      const t = await getTrainer(freshAthlete.trainer_id)
+      setAthleteTrainer(t)
       if (isBillingDue(freshAthlete)) {
         setBillingAthlete(freshAthlete)
-        const t = await getTrainer(freshAthlete.trainer_id)
         setTrainerForBilling(t)
       }
       setLoading(false)
@@ -160,18 +162,48 @@ export default function WorkoutPage() {
       setSetsDone((prev) => new Set([...prev, key]))
       const isLastSet = setNum >= ex.sets
 
-      if (ex.rest_seconds > 0) {
-        setRestTimer({ remaining: ex.rest_seconds, total: ex.rest_seconds })
-      }
+      if (ex.group_id != null) {
+        // ── Grouped exercise (bi-set / tri-set / circuit / drop-set) ──────────
+        const groupExs = exercises
+          .filter((e) => e.group_id === ex.group_id)
+          .sort((a, b) => a.order_index - b.order_index)
+        const myIdxInGroup = groupExs.findIndex((e) => e.id === ex.id)
+        const isLastInGroup = myIdxInGroup === groupExs.length - 1
 
-      if (!isLastSet) {
-        setCurrentSetByEx((prev) => ({ ...prev, [ex.id]: setNum + 1 }))
-        setRepsByEx((prev) => ({ ...prev, [ex.id]: String(ex.reps) }))
-        setWeightByEx((prev) => ({ ...prev, [ex.id]: ex.weight_kg ? String(ex.weight_kg) : '' }))
+        if (!isLastSet) {
+          setCurrentSetByEx((prev) => ({ ...prev, [ex.id]: setNum + 1 }))
+          setRepsByEx((prev) => ({ ...prev, [ex.id]: String(ex.reps) }))
+          setWeightByEx((prev) => ({ ...prev, [ex.id]: ex.weight_kg ? String(ex.weight_kg) : '' }))
+        }
+
+        if (!isLastInGroup) {
+          // More exercises in the group this round — advance immediately, no rest
+          setExpandedExId(groupExs[myIdxInGroup + 1].id)
+        } else {
+          // Completed full round of the group — fire rest now
+          if (ex.rest_seconds > 0) setRestTimer({ remaining: ex.rest_seconds, total: ex.rest_seconds })
+          if (!isLastSet) {
+            // Back to first exercise of the group for the next round
+            setExpandedExId(groupExs[0].id)
+          } else {
+            // All rounds done — advance past the entire group
+            const maxOrder = Math.max(...groupExs.map((e) => e.order_index))
+            const nextEx = exercises.find((e) => e.order_index > maxOrder)
+            setExpandedExId(nextEx ? nextEx.id : null)
+          }
+        }
       } else {
-        const currIdx = exercises.findIndex((e) => e.id === ex.id)
-        const nextEx = exercises[currIdx + 1]
-        setExpandedExId(nextEx ? nextEx.id : null)
+        // ── Standalone exercise ───────────────────────────────────────────────
+        if (ex.rest_seconds > 0) setRestTimer({ remaining: ex.rest_seconds, total: ex.rest_seconds })
+        if (!isLastSet) {
+          setCurrentSetByEx((prev) => ({ ...prev, [ex.id]: setNum + 1 }))
+          setRepsByEx((prev) => ({ ...prev, [ex.id]: String(ex.reps) }))
+          setWeightByEx((prev) => ({ ...prev, [ex.id]: ex.weight_kg ? String(ex.weight_kg) : '' }))
+        } else {
+          const currIdx = exercises.findIndex((e) => e.id === ex.id)
+          const nextEx = exercises[currIdx + 1]
+          setExpandedExId(nextEx ? nextEx.id : null)
+        }
       }
     }
     setSavingSet(false)
@@ -190,6 +222,160 @@ export default function WorkoutPage() {
     ),
     [exercises, setsDone]
   )
+
+  const METHOD_LABEL: Record<string, string> = { biset: 'BI-SET', triset: 'TRI-SET', circuit: 'CIRCUITO', dropset: 'DROP-SET' }
+  const GROUP_LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
+
+  type DisplayRow =
+    | { type: 'single'; ex: Exercise; rowNum: number }
+    | { type: 'group'; method: string; exercises: Exercise[]; rowNum: number }
+
+  const displayRows = useMemo((): DisplayRow[] => {
+    const rows: DisplayRow[] = []
+    const seenGroups = new Set<number>()
+    let rowNum = 0
+    for (const ex of exercises) {
+      if (ex.group_id == null) {
+        rowNum++
+        rows.push({ type: 'single', ex, rowNum })
+      } else if (!seenGroups.has(ex.group_id)) {
+        seenGroups.add(ex.group_id)
+        rowNum++
+        const groupExs = exercises
+          .filter((e) => e.group_id === ex.group_id)
+          .sort((a, b) => a.order_index - b.order_index)
+        rows.push({ type: 'group', method: ex.method ?? 'biset', exercises: groupExs, rowNum })
+      }
+    }
+    return rows
+  }, [exercises])
+
+  const renderExCard = (ex: Exercise, label: string, inGroup: boolean) => {
+    const exSetsDone = Array.from({ length: ex.sets }, (_, s) => s + 1).filter((s) => setsDone.has(`${ex.id}-${s}`))
+    const isAllDone = exSetsDone.length >= ex.sets
+    const isExpanded = expandedExId === ex.id && started && !isAllDone
+    const currentSet = currentSetByEx[ex.id] ?? 1
+    const badgeColor = inGroup ? 'var(--accent)' : 'var(--ink-4)'
+    const badgeBg = inGroup ? 'var(--accent-soft)' : 'transparent'
+
+    return (
+      <div key={ex.id} style={{
+        background: 'var(--ink-2)',
+        ...(!inGroup ? {
+          border: `1px solid ${isExpanded ? 'var(--fg-4)' : isAllDone ? 'color-mix(in oklch, var(--accent), black 60%)' : 'var(--ink-4)'}`,
+          borderRadius: 'var(--r-lg)',
+          overflow: 'hidden',
+        } : {
+          borderTop: '1px solid var(--ink-4)',
+        }),
+        opacity: isAllDone && !isExpanded ? 0.6 : 1,
+        transition: 'opacity 0.2s',
+      }}>
+        <button
+          onClick={() => started && !isAllDone ? setExpandedExId(isExpanded ? null : ex.id) : undefined}
+          style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', color: 'var(--fg-1)', cursor: started && !isAllDone ? 'pointer' : 'default', textAlign: 'left' }}
+        >
+          <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${isAllDone ? 'var(--accent)' : badgeColor}`, background: isAllDone ? 'var(--accent-soft)' : badgeBg }}>
+            {isAllDone
+              ? KVIcon.check(11, 'var(--accent)')
+              : <span className="num" style={{ fontSize: 9, color: isAllDone ? 'var(--accent)' : inGroup ? 'var(--accent)' : 'var(--fg-3)' }}>{label}</span>
+            }
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: isAllDone ? 'var(--fg-2)' : 'var(--fg-1)' }}>{ex.name}</div>
+            <div className="num" style={{ marginTop: 2, fontSize: 10, color: 'var(--fg-3)', display: 'flex', gap: 6 }}>
+              <span>{ex.sets}×{ex.reps}</span>
+              {ex.weight_kg && <><span>·</span><span>{ex.weight_kg}kg</span></>}
+              {ex.rest_seconds > 0 && !inGroup && <><span>·</span><span>{ex.rest_seconds}s desc</span></>}
+            </div>
+          </div>
+          {started && (
+            <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+              {Array.from({ length: ex.sets }, (_, s) => s + 1).map((s) => (
+                <div key={s} style={{ width: 6, height: 6, borderRadius: '50%', background: setsDone.has(`${ex.id}-${s}`) ? 'var(--accent)' : 'var(--ink-4)', transition: 'background 0.2s' }}/>
+              ))}
+            </div>
+          )}
+          {started && !isAllDone && (
+            <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}>
+              {KVIcon.chevR(12, 'var(--fg-4)')}
+            </div>
+          )}
+        </button>
+
+        {isExpanded && (
+          <div style={{ borderTop: '1px solid var(--ink-4)', padding: '16px 16px 18px' }}>
+            {ex.youtube_video_id && (
+              <div style={{ marginBottom: 14, aspectRatio: '16/9', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+                <iframe src={getYouTubeEmbedUrl(ex.youtube_video_id)} title={ex.name}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen style={{ width: '100%', height: '100%', border: 'none' }}/>
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div className="eyebrow">Série {currentSet} de {ex.sets}</div>
+              {exSetsDone.length > 0 && (
+                <span style={{ fontSize: 10, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace" }}>
+                  {exSetsDone.length}/{ex.sets} ✓
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: 'var(--fg-3)', marginBottom: 6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.1em', textTransform: 'uppercase' }}>Reps</div>
+                <input type="number" min="0" value={repsByEx[ex.id] ?? ''}
+                  onChange={(e) => setRepsByEx((p) => ({ ...p, [ex.id]: e.target.value }))}
+                  style={{ width: '100%', height: 48, padding: '0 12px', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 18, color: 'var(--fg-1)', outline: 'none', textAlign: 'center', fontFamily: "'JetBrains Mono', monospace" }}/>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: 'var(--fg-3)', marginBottom: 6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.1em', textTransform: 'uppercase' }}>Kg</div>
+                <input type="number" min="0" step="0.5" value={weightByEx[ex.id] ?? ''}
+                  onChange={(e) => setWeightByEx((p) => ({ ...p, [ex.id]: e.target.value }))}
+                  placeholder={lastWeightByName[ex.name] ? String(lastWeightByName[ex.name]) : '0'}
+                  style={{ width: '100%', height: 48, padding: '0 12px', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 18, color: 'var(--fg-1)', outline: 'none', textAlign: 'center', fontFamily: "'JetBrains Mono', monospace" }}/>
+              </div>
+            </div>
+            <button onClick={() => handleLogSet(ex)} disabled={savingSet || !repsByEx[ex.id]}
+              style={{ width: '100%', height: 50, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: savingSet || !repsByEx[ex.id] ? 'not-allowed' : 'pointer', opacity: savingSet || !repsByEx[ex.id] ? 0.5 : 1 }}>
+              {KVIcon.check(16, 'var(--accent-ink)')}
+              {savingSet ? 'Salvando...' : `Concluir série — ${repsByEx[ex.id] ?? ''} reps${weightByEx[ex.id] ? `, ${weightByEx[ex.id]} kg` : ''}`}
+            </button>
+            {ex.notes && (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--fg-3)', fontStyle: 'italic' }}>{ex.notes}</div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderGroupRow = (row: { type: 'group'; method: string; exercises: Exercise[]; rowNum: number }) => {
+    const groupAllDone = row.exercises.every((ex) =>
+      Array.from({ length: ex.sets }, (_, s) => s + 1).every((s) => setsDone.has(`${ex.id}-${s}`))
+    )
+    const restSecs = row.exercises[0]?.rest_seconds ?? 0
+    return (
+      <div key={`group-${row.exercises[0].id}`} style={{
+        border: `1px solid ${groupAllDone ? 'color-mix(in oklch, var(--accent), black 60%)' : 'var(--accent)'}`,
+        borderRadius: 'var(--r-lg)',
+        overflow: 'hidden',
+        opacity: groupAllDone ? 0.6 : 1,
+        transition: 'opacity 0.2s',
+      }}>
+        <div style={{ padding: '7px 14px', background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.12em' }}>
+            {METHOD_LABEL[row.method] ?? row.method.toUpperCase()}
+          </span>
+          {restSecs > 0 && (
+            <span style={{ fontSize: 10, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace" }}>
+              · {restSecs}s desc após o grupo
+            </span>
+          )}
+        </div>
+        {row.exercises.map((ex, gIdx) => renderExCard(ex, GROUP_LABELS[gIdx] ?? String(gIdx + 1), true))}
+      </div>
+    )
+  }
 
   const lastWeightByName = useMemo(() => {
     const map: Record<string, number> = {}
@@ -532,6 +718,35 @@ export default function WorkoutPage() {
               </div>
             )}
           </div>
+
+          {/* Personal */}
+          {athleteTrainer && (
+            <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 16, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-2)', marginBottom: 14 }}>Meu Personal</div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
+                <KVAvatar name={athleteTrainer.name} size={44} tone="accent" src={athleteTrainer.avatar_url}/>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--fg-1)' }}>{athleteTrainer.name}</div>
+                  {athleteTrainer.cref && (
+                    <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>CREF {athleteTrainer.cref}</div>
+                  )}
+                </div>
+              </div>
+              {(athleteTrainer.phone || athleteTrainer.bio) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {[
+                    { label: 'Telefone', value: athleteTrainer.phone },
+                    { label: 'Bio', value: athleteTrainer.bio },
+                  ].map(({ label, value }) => value ? (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                      <span style={{ fontSize: 13, color: 'var(--fg-3)', flexShrink: 0 }}>{label}</span>
+                      <span style={{ fontSize: 13, color: 'var(--fg-1)', textAlign: 'right', maxWidth: '60%', lineHeight: 1.5 }}>{value}</span>
+                    </div>
+                  ) : null)}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Ranking position */}
           {rankingPosition && rankingPosition.totalAthletes > 1 && (
@@ -876,107 +1091,11 @@ export default function WorkoutPage() {
 
           {/* Exercise accordion */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {exercises.map((ex, i) => {
-              const exSetsDone = Array.from({ length: ex.sets }, (_, s) => s + 1).filter((s) => setsDone.has(`${ex.id}-${s}`))
-              const isAllDone = exSetsDone.length >= ex.sets
-              const isExpanded = expandedExId === ex.id && started && !isAllDone
-              const currentSet = currentSetByEx[ex.id] ?? 1
-
-              return (
-                <div key={ex.id} style={{
-                  background: 'var(--ink-2)',
-                  border: `1px solid ${isExpanded ? 'var(--fg-4)' : isAllDone ? 'color-mix(in oklch, var(--accent), black 60%)' : 'var(--ink-4)'}`,
-                  borderRadius: 'var(--r-lg)',
-                  overflow: 'hidden',
-                  opacity: isAllDone && !isExpanded ? 0.6 : 1,
-                  transition: 'opacity 0.2s, border-color 0.2s',
-                }}>
-                  {/* Header row */}
-                  <button
-                    onClick={() => started && !isAllDone ? setExpandedExId(isExpanded ? null : ex.id) : undefined}
-                    style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', color: 'var(--fg-1)', cursor: started && !isAllDone ? 'pointer' : 'default', textAlign: 'left' }}
-                  >
-                    <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${isAllDone ? 'var(--accent)' : 'var(--ink-4)'}`, background: isAllDone ? 'var(--accent-soft)' : 'transparent' }}>
-                      {isAllDone
-                        ? KVIcon.check(11, 'var(--accent)')
-                        : <span className="num" style={{ fontSize: 9, color: 'var(--fg-3)' }}>{String(i + 1).padStart(2, '0')}</span>
-                      }
-                    </div>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: isAllDone ? 'var(--fg-2)' : 'var(--fg-1)' }}>{ex.name}</div>
-                      <div className="num" style={{ marginTop: 2, fontSize: 10, color: 'var(--fg-3)', display: 'flex', gap: 6 }}>
-                        <span>{ex.sets}×{ex.reps}</span>
-                        {ex.weight_kg && <><span>·</span><span>{ex.weight_kg}kg</span></>}
-                        {ex.rest_seconds > 0 && <><span>·</span><span>{ex.rest_seconds}s desc</span></>}
-                      </div>
-                    </div>
-
-                    {started && (
-                      <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                        {Array.from({ length: ex.sets }, (_, s) => s + 1).map((s) => (
-                          <div key={s} style={{ width: 6, height: 6, borderRadius: '50%', background: setsDone.has(`${ex.id}-${s}`) ? 'var(--accent)' : 'var(--ink-4)', transition: 'background 0.2s' }}/>
-                        ))}
-                      </div>
-                    )}
-
-                    {started && !isAllDone && (
-                      <div style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}>
-                        {KVIcon.chevR(12, 'var(--fg-4)')}
-                      </div>
-                    )}
-                  </button>
-
-                  {/* Expanded: set logging */}
-                  {isExpanded && (
-                    <div style={{ borderTop: '1px solid var(--ink-4)', padding: '16px 16px 18px' }}>
-                      {ex.youtube_video_id && (
-                        <div style={{ marginBottom: 14, aspectRatio: '16/9', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
-                          <iframe src={getYouTubeEmbedUrl(ex.youtube_video_id)} title={ex.name}
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen style={{ width: '100%', height: '100%', border: 'none' }}/>
-                        </div>
-                      )}
-
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <div className="eyebrow">Série {currentSet} de {ex.sets}</div>
-                        {exSetsDone.length > 0 && (
-                          <span style={{ fontSize: 10, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace" }}>
-                            {exSetsDone.length}/{ex.sets} ✓
-                          </span>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 10, color: 'var(--fg-3)', marginBottom: 6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.1em', textTransform: 'uppercase' }}>Reps</div>
-                          <input type="number" min="0" value={repsByEx[ex.id] ?? ''}
-                            onChange={(e) => setRepsByEx((p) => ({ ...p, [ex.id]: e.target.value }))}
-                            style={{ width: '100%', height: 48, padding: '0 12px', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 18, color: 'var(--fg-1)', outline: 'none', textAlign: 'center', fontFamily: "'JetBrains Mono', monospace" }}/>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 10, color: 'var(--fg-3)', marginBottom: 6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.1em', textTransform: 'uppercase' }}>Kg</div>
-                          <input type="number" min="0" step="0.5" value={weightByEx[ex.id] ?? ''}
-                            onChange={(e) => setWeightByEx((p) => ({ ...p, [ex.id]: e.target.value }))}
-                            placeholder={lastWeightByName[ex.name] ? String(lastWeightByName[ex.name]) : '0'}
-                            style={{ width: '100%', height: 48, padding: '0 12px', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 18, color: 'var(--fg-1)', outline: 'none', textAlign: 'center', fontFamily: "'JetBrains Mono', monospace" }}/>
-                        </div>
-                      </div>
-
-                      <button onClick={() => handleLogSet(ex)} disabled={savingSet || !repsByEx[ex.id]}
-                        style={{ width: '100%', height: 50, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: savingSet || !repsByEx[ex.id] ? 'not-allowed' : 'pointer', opacity: savingSet || !repsByEx[ex.id] ? 0.5 : 1 }}>
-                        {KVIcon.check(16, 'var(--accent-ink)')}
-                        {savingSet ? 'Salvando...' : `Concluir série — ${repsByEx[ex.id] ?? ''} reps${weightByEx[ex.id] ? `, ${weightByEx[ex.id]} kg` : ''}`}
-                      </button>
-
-                      {ex.notes && (
-                        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--fg-3)', fontStyle: 'italic' }}>{ex.notes}</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+            {displayRows.map((row) =>
+              row.type === 'single'
+                ? renderExCard(row.ex, String(row.rowNum).padStart(2, '0'), false)
+                : renderGroupRow(row)
+            )}
           </div>
         </div>
       )}

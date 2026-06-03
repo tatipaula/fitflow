@@ -126,7 +126,7 @@ export default function DashboardPage() {
 
   // Trainer profile
   const [trainerAvatarUrl, setTrainerAvatarUrl] = useState<string | null>(null)
-  const [trainerProfileData, setTrainerProfileData] = useState<{ name: string; phone: string; bio: string }>({ name: '', phone: '', bio: '' })
+  const [trainerProfileData, setTrainerProfileData] = useState<{ name: string; phone: string; bio: string; cref: string }>({ name: '', phone: '', bio: '', cref: '' })
   const [trainerProfileEditing, setTrainerProfileEditing] = useState(false)
   const [savingTrainerProfile, setSavingTrainerProfile] = useState(false)
   const [trainerProfileSaved, setTrainerProfileSaved] = useState(false)
@@ -189,7 +189,7 @@ export default function DashboardPage() {
     if (!trainer) { setLoadingData(false); return }
     setTrainerPixKey(trainer.pix_key ?? null)
     setTrainerAvatarUrl(trainer.avatar_url ?? null)
-    setTrainerProfileData({ name: trainer.name ?? '', phone: trainer.phone ?? '', bio: trainer.bio ?? '' })
+    setTrainerProfileData({ name: trainer.name ?? '', phone: trainer.phone ?? '', bio: trainer.bio ?? '', cref: trainer.cref ?? '' })
     Promise.all([getAthletes(trainer.id), getWorkouts(trainer.id), getCheckinCountsByTrainer(trainer.id), getBadgesByTrainer(trainer.id), getTrainerPrograms(trainer.id)])
       .then(([a, w, counts, badges, progs]) => { setAthletes(a); setWorkouts(w); setCheckinCounts(counts); setTrainerBadges(badges); setAllPrograms(progs) })
       .catch(console.error)
@@ -562,6 +562,7 @@ export default function DashboardPage() {
       name: trainerProfileData.name.trim() || undefined,
       phone: trainerProfileData.phone.trim() || undefined,
       bio: trainerProfileData.bio.trim() || undefined,
+      cref: trainerProfileData.cref.trim() || undefined,
     })
     if (ok) { setTrainerProfileSaved(true); setTrainerProfileEditing(false); setTimeout(() => setTrainerProfileSaved(false), 2500) }
     setSavingTrainerProfile(false)
@@ -645,6 +646,11 @@ export default function DashboardPage() {
             </button>
           )
         })}
+        <button onClick={() => setShowLibrary(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--r-md)', background: showLibrary ? 'var(--accent-soft)' : 'transparent', color: showLibrary ? 'var(--accent)' : 'var(--fg-2)', fontSize: 14, border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+          Biblioteca
+        </button>
       </div>
       <div style={{ padding: '16px 0 8px', borderTop: '1px solid var(--ink-4)', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button onClick={() => setView('billing')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-md)', background: view === 'billing' ? 'var(--accent-soft)' : 'transparent', border: 'none', cursor: 'pointer', color: view === 'billing' ? 'var(--accent)' : pendingBillingCount > 0 ? 'var(--accent)' : 'var(--fg-3)', fontSize: 13, width: '100%', textAlign: 'left' }}>
@@ -711,6 +717,11 @@ export default function DashboardPage() {
           </button>
         )
       })}
+      <button onClick={() => setShowLibrary(true)}
+        style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 4px', background: 'none', border: 'none', color: showLibrary ? 'var(--accent)' : 'var(--fg-3)', fontSize: 10, cursor: 'pointer' }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        Biblioteca
+      </button>
     </div>
   )
 
@@ -745,8 +756,8 @@ export default function DashboardPage() {
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--ink-4)' }}>
             <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--accent)' }}>Alunos</div>
-            <button onClick={() => setView('athletes')} style={{ fontSize: 12, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-              Ver todos {KVIcon.chevR(10, 'var(--fg-3)')}
+            <button onClick={() => setView('athletes')} style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderRadius: 999, padding: '4px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+              Ver todos {KVIcon.chevR(11, 'var(--accent)')}
             </button>
           </div>
           {athletes.length === 0 ? (
@@ -756,15 +767,19 @@ export default function DashboardPage() {
               const aw = workouts.filter((w) => w.athlete_id === a.id)
               const adh = aw.length > 0 ? Math.min(1, aw.filter((w) => w.status === 'ready').length / Math.max(aw.length, 1)) : 0
               return (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: i < Math.min(athletes.length, 4) - 1 ? '1px solid var(--ink-4)' : 'none' }}>
+                <button key={a.id} onClick={() => handleViewAthleteDetail(a)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: i < Math.min(athletes.length, 4) - 1 ? '1px solid var(--ink-4)' : 'none', width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
                   <KVAvatar name={a.name} size={36} tone="warm" src={a.avatar_url}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                    <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--fg-1)' }}>{a.name}</div>
                     <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{aw.length > 0 ? `${aw.length} treinos` : 'Sem sessões'}</div>
                     {aw.length > 0 && <div style={{ marginTop: 6 }}><KVMeter value={adh}/></div>}
                   </div>
-                  <div className="num" style={{ fontSize: 12, color: 'var(--fg-2)', flexShrink: 0 }}>{Math.round(adh * 100)}%</div>
-                </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <span className="num" style={{ fontSize: 12, color: 'var(--fg-2)' }}>{Math.round(adh * 100)}%</span>
+                    {KVIcon.chevR(12, 'var(--fg-3)')}
+                  </div>
+                </button>
               )
             })
           )}
@@ -1561,13 +1576,31 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-        {detectedExercises.map((ex, i) => (
-          <div key={ex.id} style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
-            {/* Header */}
+      {(() => {
+        const REVIEW_METHOD_LABEL: Record<string, string> = { biset: 'BI-SET', triset: 'TRI-SET', circuit: 'CIRCUITO', dropset: 'DROP-SET' }
+        const REVIEW_GROUP_LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
+        type ReviewRow =
+          | { type: 'single'; ex: typeof detectedExercises[0]; globalIdx: number }
+          | { type: 'group'; method: string; items: Array<{ ex: typeof detectedExercises[0]; globalIdx: number }> }
+        const reviewRows: ReviewRow[] = []
+        const seen = new Set<number>()
+        detectedExercises.forEach((ex, idx) => {
+          if (ex.group_id == null) {
+            reviewRows.push({ type: 'single', ex, globalIdx: idx })
+          } else if (!seen.has(ex.group_id)) {
+            seen.add(ex.group_id)
+            const items = detectedExercises
+              .map((e, i) => ({ ex: e, globalIdx: i }))
+              .filter(({ ex: e }) => e.group_id === ex.group_id)
+            reviewRows.push({ type: 'group', method: ex.method ?? 'biset', items })
+          }
+        })
+
+        const renderReviewCard = (ex: typeof detectedExercises[0], label: string, inGroup: boolean) => (
+          <div key={ex.id} style={{ background: 'var(--ink-2)', ...(!inGroup ? { border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', overflow: 'hidden' } : { borderTop: '1px solid var(--ink-4)' }) }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '14px 16px' }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span className="num" style={{ fontSize: 10, color: 'var(--accent)' }}>{i + 1}</span>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: inGroup ? 'var(--accent-soft)' : 'var(--ink-3)', border: `1px solid ${inGroup ? 'var(--accent)' : 'var(--ink-4)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span className="num" style={{ fontSize: 10, color: inGroup ? 'var(--accent)' : 'var(--fg-3)' }}>{label}</span>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{ex.name}</div>
@@ -1653,8 +1686,28 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-        ))}
-      </div>
+        )
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+            {reviewRows.map((row) => {
+              if (row.type === 'single') {
+                return renderReviewCard(row.ex, String(row.globalIdx + 1), false)
+              }
+              return (
+                <div key={`rgroup-${row.items[0].ex.id}`} style={{ border: '1px solid var(--accent)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                  <div style={{ padding: '7px 14px', background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.12em' }}>
+                      {REVIEW_METHOD_LABEL[row.method] ?? row.method.toUpperCase()}
+                    </span>
+                  </div>
+                  {row.items.map(({ ex }, gIdx) => renderReviewCard(ex, REVIEW_GROUP_LABELS[gIdx] ?? String(gIdx + 1), true))}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {/* Confirm button */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -2539,6 +2592,10 @@ export default function DashboardPage() {
               <input type="text" value={trainerProfileData.name} onChange={(e) => setTrainerProfileData((p) => ({ ...p, name: e.target.value }))} placeholder={trainer?.name} style={inpStyle}/>
             </div>
             <div>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>CREF</div>
+              <input type="text" value={trainerProfileData.cref} onChange={(e) => setTrainerProfileData((p) => ({ ...p, cref: e.target.value }))} placeholder="Ex: 123456-G/SP" style={inpStyle}/>
+            </div>
+            <div>
               <div style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Telefone / WhatsApp</div>
               <input type="tel" value={trainerProfileData.phone} onChange={(e) => setTrainerProfileData((p) => ({ ...p, phone: e.target.value }))} placeholder="(11) 99999-9999" style={inpStyle}/>
             </div>
@@ -2563,6 +2620,7 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
               { label: 'E-mail', value: trainer?.email },
+              { label: 'CREF', value: trainerProfileData.cref || null },
               { label: 'Telefone', value: trainerProfileData.phone || null },
               { label: 'Bio', value: trainerProfileData.bio || null },
             ].map(({ label, value }) => value ? (
@@ -2571,7 +2629,7 @@ export default function DashboardPage() {
                 <span style={{ fontSize: 13, color: 'var(--fg-1)', textAlign: 'right', maxWidth: '65%', lineHeight: 1.5 }}>{value}</span>
               </div>
             ) : null)}
-            {!trainerProfileData.phone && !trainerProfileData.bio && (
+            {!trainerProfileData.phone && !trainerProfileData.bio && !trainerProfileData.cref && (
               <div style={{ fontSize: 13, color: 'var(--fg-4)' }}>Nenhum dado preenchido. Toque em Editar.</div>
             )}
           </div>
@@ -2696,10 +2754,12 @@ export default function DashboardPage() {
             </button>
           </div>
           <div style={{ fontSize: 13, color: 'var(--fg-3)', marginBottom: 16 }}>
-            Toque em um exercício para adicioná-lo ao treino.
+            {view === 'recording' && inputMode === 'text'
+              ? 'Toque para adicionar ao treino atual.'
+              : 'Toque para montar uma lista — ela fica pronta em Novo Treino.'}
             {workoutText.trim() && (
               <span style={{ color: 'var(--accent)', marginLeft: 6 }}>
-                {workoutText.trim().split('\n').filter(Boolean).length} adicionado(s)
+                {workoutText.trim().split('\n').filter(Boolean).length} exercício(s) na fila.
               </span>
             )}
           </div>
