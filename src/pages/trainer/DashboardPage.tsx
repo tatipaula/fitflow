@@ -646,11 +646,6 @@ export default function DashboardPage() {
             </button>
           )
         })}
-        <button onClick={() => setShowLibrary(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--r-md)', background: showLibrary ? 'var(--accent-soft)' : 'transparent', color: showLibrary ? 'var(--accent)' : 'var(--fg-2)', fontSize: 14, border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%' }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-          Biblioteca
-        </button>
       </div>
       <div style={{ padding: '16px 0 8px', borderTop: '1px solid var(--ink-4)', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button onClick={() => setView('billing')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-md)', background: view === 'billing' ? 'var(--accent-soft)' : 'transparent', border: 'none', cursor: 'pointer', color: view === 'billing' ? 'var(--accent)' : pendingBillingCount > 0 ? 'var(--accent)' : 'var(--fg-3)', fontSize: 13, width: '100%', textAlign: 'left' }}>
@@ -717,11 +712,6 @@ export default function DashboardPage() {
           </button>
         )
       })}
-      <button onClick={() => setShowLibrary(true)}
-        style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 4px', background: 'none', border: 'none', color: showLibrary ? 'var(--accent)' : 'var(--fg-3)', fontSize: 10, cursor: 'pointer' }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-        Biblioteca
-      </button>
     </div>
   )
 
