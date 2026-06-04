@@ -1,10 +1,31 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-04 (sessão 22)
+## Última atualização: 2026-06-04 (sessão 23)
 
 ---
 
 ## Concluído
+
+### Sessão 23 — Automação de emails via pg_cron (offer-plans + recovery)
+
+#### offer-plans — aviso D-3 do trial
+- Edge function refatorada com **batch mode**: quando chamada sem `trainer_email` no body, consulta o DB e envia para todos os trainers com `plan='free'` e `trial_ends_at` exatamente 3 dias à frente
+- Email com assunto "Seu trial acaba em 3 dias" e CTA de assinatura R$49/mês
+- Modo single ainda funciona para teste manual com `{ trainer_email }`
+- pg_cron job `offer-plans-daily`: `0 12 * * *` (9h BRT)
+
+#### recovery — carrinho abandonado (disparo único)
+- Edge function refatorada com **batch mode**: consulta trainers com `stripe_customer_id IS NOT NULL`, `stripe_subscription_id IS NULL`, `plan='free'` e `recovery_email_sent = false`
+- Envia email "Ainda pensando no plano?" — disparo **único por trainer** (marca flag no sucesso)
+- Coluna `recovery_email_sent boolean NOT NULL DEFAULT false` adicionada a `trainers`
+- pg_cron job `recovery-daily`: `0 13 * * *` (10h BRT)
+
+#### Infra
+- `pg_net` habilitado no projeto Supabase
+- Migration `20260604000002_cron_emails.sql` aplicada
+- Deploy das duas edge functions em produção ✓
+
+---
 
 ### Sessão 22 — Gateway de pagamento Stripe + planos + trial
 
@@ -235,14 +256,13 @@
 
 ## Pendências imediatas
 
-- **Stripe**: definir canal de pagamento (web vs app store). Após decisão: implementar checkout, conectar `purchase-confirmed` no webhook, conectar `offer-plans` via pg_cron para plano free, conectar `recovery` para carrinhos abandonados.
+- **Stripe livemode**: testar fluxo completo com cartão real (até agora testado apenas com `sk_test_`)
 
 ---
 
 ## Backlog
 
 - Histórico de pagamentos por mês (requer tabela `payment_logs`)
-- Stripe: definir canal de pagamento (web vs app store) e implementar
 - Métricas de evolução de cargas por exercício (histórico comparável)
 - Integração WhatsApp para notificações de cobrança
 - Auto-completar programa via trigger já implementado — validar em produção com dados reais
