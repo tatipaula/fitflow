@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
 })
 
 async function sendOfferEmail(name: string, email: string): Promise<void> {
-  const plansLink = 'https://kinevia.com.br/planos'
+  const plansLink = 'https://kinevia.com.br/trainer'
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',

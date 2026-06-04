@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     await sendRecoveryEmail(
       trainer_name ?? 'Personal',
       trainer_email,
-      checkout_link ?? 'https://kinevia.com.br/planos',
+      checkout_link ?? 'https://kinevia.com.br/trainer',
     )
     return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders })
   } catch (e) {

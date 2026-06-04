@@ -257,6 +257,7 @@
 ## Pendências imediatas
 
 - **Stripe livemode**: testar fluxo completo com cartão real (até agora testado apenas com `sk_test_`)
+- **Emails — verificar CTA**: link dos emails corrigido de `/planos` para `/trainer`; confirmar que botão leva ao checkout corretamente com trainer em trial real
 
 ---
 
