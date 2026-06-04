@@ -33,7 +33,7 @@
 #### Frontend
 - `src/lib/api.ts`: helpers `hasActiveAccess()`, `trialDaysLeft()`, `createCheckoutSession()`
 - `src/pages/trainer/PaywallPage.tsx`: tela de assinatura exibida quando trial expira — lista de features, preço, botão que abre Stripe Checkout
-- `src/App.tsx`: `TrainerRoute` — gating que exibe `PaywallPage` ou `DashboardPage` conforme acesso
+- `src/App.tsx`: `TrainerRoute` — gating que exibe `PaywallPage` ou `DashboardPage` conforme acesso; polling pós-pagamento exibe "Confirmando pagamento..." por até 15s após redirect do Stripe, entrando no dashboard assim que webhook atualizar `plan=pro`
 - `src/pages/trainer/DashboardPage.tsx`: banner de trial com contagem regressiva e botão "Assinar" para trainers em período gratuito
 - Deploy em produção ✓
 
