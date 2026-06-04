@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
-import { linkAthleteAccount, linkAthleteByInviteToken, saveParqResponse, updateAthleteProfile, hasActiveAccess } from '@/lib/api'
+import { linkAthleteAccount, linkAthleteByInviteToken, saveParqResponse, updateAthleteProfile, hasActiveAccess, getTrainer } from '@/lib/api'
 import { registerPush } from '@/lib/push'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import LoginPage from '@/pages/auth/LoginPage'
@@ -13,7 +13,38 @@ import PaywallPage from '@/pages/trainer/PaywallPage'
 import WorkoutPage from '@/pages/athlete/WorkoutPage'
 
 function TrainerRoute() {
-  const trainer = useAuthStore((s) => s.trainer)
+  const trainer    = useAuthStore((s) => s.trainer)
+  const setTrainer = useAuthStore((s) => s.setTrainer)
+  const [polling, setPolling] = useState(false)
+
+  useEffect(() => {
+    if (sessionStorage.getItem('payment_pending') !== '1') return
+    if (!trainer) return
+    setPolling(true)
+    let attempts = 0
+    const interval = setInterval(async () => {
+      attempts++
+      const fresh = await getTrainer(trainer.id)
+      if ((fresh && fresh.plan === 'pro') || attempts >= 10) {
+        sessionStorage.removeItem('payment_pending')
+        if (fresh) setTrainer(fresh)
+        setPolling(false)
+        clearInterval(interval)
+      }
+    }, 1500)
+    return () => clearInterval(interval)
+  }, [trainer?.id])
+
+  if (polling) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div style={{ width: 28, height: 28, border: '2px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+        <div style={{ fontSize: 14, color: 'var(--fg-2)' }}>Confirmando pagamento...</div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
   if (trainer && !hasActiveAccess(trainer)) return <PaywallPage />
   return <DashboardPage />
 }
