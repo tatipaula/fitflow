@@ -33,6 +33,30 @@ import { supabase } from './supabase'
 import { transcribeAudio } from './whisper'
 import { searchExerciseVideo } from './youtube'
 
+// ─── Plan / subscription ──────────────────────────────────────────────────────
+
+export function hasActiveAccess(trainer: import('@/types').Trainer): boolean {
+  if (trainer.plan === 'pro') return true
+  if (!trainer.trial_ends_at) return false
+  return new Date(trainer.trial_ends_at) > new Date()
+}
+
+export function trialDaysLeft(trainer: import('@/types').Trainer): number {
+  if (!trainer.trial_ends_at) return 0
+  const diff = new Date(trainer.trial_ends_at).getTime() - Date.now()
+  return Math.max(0, Math.ceil(diff / 86_400_000))
+}
+
+export async function createCheckoutSession(): Promise<{ url: string } | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('stripe-checkout', { body: {} })
+    if (error || !data?.url) return null
+    return { url: data.url }
+  } catch {
+    return null
+  }
+}
+
 // ─── Emails ───────────────────────────────────────────────────────────────────
 
 export async function sendWelcomeEmail(trainerName: string, trainerEmail: string): Promise<void> {

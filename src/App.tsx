@@ -2,14 +2,21 @@ import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
-import { linkAthleteAccount, linkAthleteByInviteToken, saveParqResponse, updateAthleteProfile } from '@/lib/api'
+import { linkAthleteAccount, linkAthleteByInviteToken, saveParqResponse, updateAthleteProfile, hasActiveAccess } from '@/lib/api'
 import { registerPush } from '@/lib/push'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import LoginPage from '@/pages/auth/LoginPage'
 import InvitePage from '@/pages/invite/InvitePage'
 import ConvitePage from '@/pages/invite/ConvitePage'
 import DashboardPage from '@/pages/trainer/DashboardPage'
+import PaywallPage from '@/pages/trainer/PaywallPage'
 import WorkoutPage from '@/pages/athlete/WorkoutPage'
+
+function TrainerRoute() {
+  const trainer = useAuthStore((s) => s.trainer)
+  if (trainer && !hasActiveAccess(trainer)) return <PaywallPage />
+  return <DashboardPage />
+}
 
 export default function App() {
   const { role, loading, initAuth, clearAuth } = useAuthStore()
@@ -46,6 +53,13 @@ export default function App() {
             localStorage.removeItem('pending_parq_physical')
           }
 
+          // Se voltou do Stripe, ativa polling para aguardar webhook
+          const params = new URLSearchParams(window.location.search)
+          if (params.get('payment') === 'success') {
+            sessionStorage.setItem('payment_pending', '1')
+            window.history.replaceState({}, '', '/trainer')
+          }
+
           initAuth(session.user.id)
           registerPush()
         }, 0)
@@ -72,7 +86,7 @@ export default function App() {
         <Route path="/convite/:token" element={<ConvitePage />} />
         <Route
           path="/trainer"
-          element={role === 'trainer' ? <DashboardPage /> : <Navigate to="/login" replace />}
+          element={role === 'trainer' ? <TrainerRoute /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/athlete"

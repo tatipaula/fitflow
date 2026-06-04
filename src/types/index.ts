@@ -19,7 +19,9 @@ export interface Trainer {
   avatar_url: string | null
   cref: string | null
   stripe_customer_id: string | null
+  stripe_subscription_id: string | null
   plan: UserPlan
+  trial_ends_at: string | null
   pix_key: string | null
   created_at: string
 }

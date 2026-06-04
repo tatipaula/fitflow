@@ -14,6 +14,7 @@ import {
   getAthleteRankingStats, getBadgesByTrainer, createBadge, deleteBadge,
   getProgramsByAthlete, createProgram, assignWorkoutToProgram, removeWorkoutFromProgram,
   getTrainerPrograms, confirmPayment, calcOverdueMonths, getAthleteEvolution,
+  trialDaysLeft, createCheckoutSession,
 } from '@/lib/api'
 import type { AthleteEvolution } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
@@ -85,6 +86,7 @@ export default function DashboardPage() {
   const [assignChecked, setAssignChecked] = useState<string[]>([])
   const [assigning, setAssigning] = useState(false)
   const [assignFeedback, setAssignFeedback] = useState<string | null>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
 
   const [workouts, setWorkouts] = useState<Workout[]>([])
   const [allPrograms, setAllPrograms] = useState<Program[]>([])
@@ -2801,11 +2803,36 @@ export default function DashboardPage() {
     </div>
   )
 
+  const daysLeft = trainer?.plan === 'free' && trainer.trial_ends_at ? trialDaysLeft(trainer) : -1
+  async function handleTrialUpgrade() {
+    setCheckoutLoading(true)
+    const result = await createCheckoutSession()
+    if (result?.url) window.location.href = result.url
+    else setCheckoutLoading(false)
+  }
+
+  const trialBanner = daysLeft >= 0 ? (
+    <div style={{ background: 'var(--accent-soft)', borderBottom: '1px solid color-mix(in oklch, var(--accent), transparent 60%)', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>
+        <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{daysLeft} {daysLeft === 1 ? 'dia' : 'dias'} restante{daysLeft !== 1 ? 's' : ''}</span>
+        {' '}no período gratuito
+      </span>
+      <button
+        onClick={handleTrialUpgrade}
+        disabled={checkoutLoading}
+        style={{ height: 30, padding: '0 14px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 700, cursor: checkoutLoading ? 'default' : 'pointer', flexShrink: 0, opacity: checkoutLoading ? 0.7 : 1 }}
+      >
+        {checkoutLoading ? 'Aguarde...' : 'Assinar — R$49/mês'}
+      </button>
+    </div>
+  ) : null
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ink-0)' }}>
       {sidebar}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {mobileHeader}
+        {trialBanner}
         {view === 'home'          && homeView}
         {view === 'billing'       && billingView}
         {view === 'athletes'      && athletesView}

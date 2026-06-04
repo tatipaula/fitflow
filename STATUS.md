@@ -1,10 +1,43 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-03 (sessão 21)
+## Última atualização: 2026-06-04 (sessão 22)
 
 ---
 
 ## Concluído
+
+### Sessão 22 — Gateway de pagamento Stripe + planos + trial
+
+#### Modelo de negócio implementado
+- Plano único **Pro — R$49/mês** (early adopter, cancele quando quiser)
+- Trial de **15 dias sem cartão** para novos cadastros
+- **Grandfathering permanente**: todos os trainers cadastrados antes de 04/06/2026 receberam `plan='pro'` automaticamente via migration
+
+#### Banco de dados
+- Migration `20260604000001_stripe_plans.sql`:
+  - Colunas `trial_ends_at timestamptz` e `stripe_subscription_id text` adicionadas a `trainers`
+  - `UPDATE trainers SET plan = 'pro'` — grandfathering de todos os usuários existentes
+  - Trigger `handle_new_trainer` atualizado: novos cadastros ficam `plan='free'` + `trial_ends_at = now() + 15 days`
+- Tipos `Trainer` atualizados em `src/types/index.ts`
+
+#### Edge functions
+- `stripe-checkout`: cria/reutiliza Stripe Customer e retorna URL do Checkout Session (mode: subscription); deployada com JWT obrigatório
+- `stripe-webhook`: processa `checkout.session.completed` (→ `plan='pro'` + dispara `purchase-confirmed`) e `customer.subscription.deleted` (→ `plan='free'`); deployada com `--no-verify-jwt`; assinatura verificada via HMAC-SHA256
+
+#### Stripe (livemode)
+- Produto **Kinevia Pro** criado (`prod_UdzpWNhzOZVsPB`)
+- Preço R$49/mês BRL criado (`price_1TehqBLfZ8saL5kFCWul5uT0`)
+- Webhook registrado (`we_1TehqLLfZ8saL5kFy3MWGGTs`) → `https://yxrmiuldmywsgrcpiuos.supabase.co/functions/v1/stripe-webhook`
+- Secrets configurados no Supabase: `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`
+
+#### Frontend
+- `src/lib/api.ts`: helpers `hasActiveAccess()`, `trialDaysLeft()`, `createCheckoutSession()`
+- `src/pages/trainer/PaywallPage.tsx`: tela de assinatura exibida quando trial expira — lista de features, preço, botão que abre Stripe Checkout
+- `src/App.tsx`: `TrainerRoute` — gating que exibe `PaywallPage` ou `DashboardPage` conforme acesso
+- `src/pages/trainer/DashboardPage.tsx`: banner de trial com contagem regressiva e botão "Assinar" para trainers em período gratuito
+- Deploy em produção ✓
+
+---
 
 ### Sessão 21 — CREF, bi-set/tri-set, biblioteca expandida e UX do dashboard
 
