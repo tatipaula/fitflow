@@ -419,7 +419,7 @@ export default function TrialPage() {
               <em style={{ color: GOLD }}>o Kinevia faz o resto.</em>
             </h1>
             <p style={sans(16, STONE, { fontWeight: 300, lineHeight: 1.8, margin: '0 0 36px', maxWidth: 360 })}>
-              Fale a prescrição. A IA transcreve, estrutura e monta a ficha — pronta para o aluno em minutos.
+              Fale a prescrição. O Kinevia transcreve, estrutura e monta a ficha — pronta para o aluno em minutos.
             </p>
             <button
               onClick={() => handleCta('hero')}
@@ -462,7 +462,7 @@ export default function TrialPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 48 }}>
             {[
               { step: '01 · GRAVAR',     desc: 'Grave a prescrição em áudio. Em segundos.' },
-              { step: '02 · ESTRUTURAR', desc: 'A IA transcreve e monta a ficha completa.' },
+              { step: '02 · ESTRUTURAR', desc: 'O Kinevia transcreve e monta a ficha completa.' },
               { step: '03 · ENVIAR',     desc: 'A ficha chega ao aluno, pronta para executar.' },
             ].map(({ step, desc }) => (
               <div key={step}>
