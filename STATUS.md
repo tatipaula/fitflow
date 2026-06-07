@@ -1,10 +1,45 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-04 (sessão 23)
+## Última atualização: 2026-06-07 (sessão 24)
 
 ---
 
 ## Concluído
+
+### Sessão 24 — Página de vendas /trial + analytics próprio
+
+#### Página de vendas (`kinevia.com.br/trial`)
+- Rota pública `/trial` adicionada ao React Router
+- 6 seções no estilo editorial bicromático do Manual de Identidade:
+  - **Hero** (Paper): eyebrow mono gold, H1 Cormorant com acento gold itálico, animação de phone do app, CTA primário
+  - **Como funciona** (Ink): 3 passos — gravar, estruturar, enviar
+  - **Jornada do aluno** (Paper): mata a objeção "precisa instalar?" — link de convite, onboarding 3 passos, ficha estruturada
+  - **O que muda** (Paper-2): comparação factual antes/depois ancorada no tempo por tarefa (15–20 min → ~2 min)
+  - **Depoimento** (Paper): Marcos Matias Xavier, texto aprovado
+  - **Preço + CTA final** (Black): "Comece com clareza. 15 dias, sem cartão. R$49/mês depois."
+- 4 CTAs rastreados individualmente: `hero`, `after-how-it-works`, `after-testimonial`, `pricing`
+- Nav fixa com fundo transparente → opaco ao scroll, CTA gold sobre dark
+- Animação do phone: state machine (idle → recording → processing → reveal → done), waveform dinâmico, ficha com reveal progressivo
+- Copy fiel ao brief: sem exclamações, sem emojis, gold apenas como accent, claims honestos
+- CTA aponta para `/login` (fluxo de cadastro do app)
+
+#### Analytics próprio — sem agência, sem scripts externos
+- `src/lib/analytics.ts`: lib de tracking sobre Supabase; `sessionStorage` por visita; `try/catch` que nunca quebra a página
+- Eventos capturados: `page_view` (com UTM params), `section_view` (IntersectionObserver, once), `cta_click` (posição exata), `scroll_depth` (25/50/75/100%), `session_end` (tempo total + profundidade máxima)
+- Tabela `page_events` no Supabase com RLS: anon pode inserir, authenticated pode ler
+- Migration `20260607000001_page_events.sql` aplicada
+
+#### Dashboard de estatísticas (`kinevia.com.br/trial/stats`)
+- Acesso por senha própria (`VITE_STATS_PW` no `.env`) — sem dependência de login de trainer
+- Sessão preservada na aba via `sessionStorage`; fecha a aba e pede senha novamente
+- Painéis: sessões únicas, cliques no CTA + taxa de conversão, funil de seções, profundidade de scroll, cliques por posição do CTA, sessões por dia (sparkbar), origens de tráfego (top 6), tempo médio na página
+- Seletor de janela de tempo: 7d / 14d / 30d
+
+#### Infra
+- `index.html`: DM Sans 300 adicionado ao carregamento de fontes
+- Deploy em produção ✓ (`kinevia.com.br`)
+
+---
 
 ### Sessão 23 — Automação de emails via pg_cron (offer-plans + recovery)
 

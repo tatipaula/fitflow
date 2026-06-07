@@ -11,6 +11,8 @@ import ConvitePage from '@/pages/invite/ConvitePage'
 import DashboardPage from '@/pages/trainer/DashboardPage'
 import PaywallPage from '@/pages/trainer/PaywallPage'
 import WorkoutPage from '@/pages/athlete/WorkoutPage'
+import TrialPage from '@/pages/trial/TrialPage'
+import TrialStatsPage from '@/pages/trial/TrialStatsPage'
 
 function TrainerRoute() {
   const trainer    = useAuthStore((s) => s.trainer)
@@ -112,6 +114,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/trial" element={<TrialPage />} />
+        <Route path="/trial/stats" element={<TrialStatsPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/invite/:token" element={<InvitePage />} />
         <Route path="/convite/:token" element={<ConvitePage />} />
