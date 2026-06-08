@@ -1,10 +1,24 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-07 (sessão 24)
+## Última atualização: 2026-06-08 (sessão 25)
 
 ---
 
 ## Concluído
+
+### Sessão 25 — Revisão de copy da página /trial
+
+- **Hero**: parágrafo substituído por dois — proposta de valor (15→2 min) + sub-copy de descrição; linha "15 dias grátis. Sem cartão de crédito." adicionada acima do CTA
+- **Como funciona**: verbos no imperativo (Grave / Estruture / Envie), novos textos de descrição, bloco "Resultado — Menos digitação. Menos retrabalho. Mais alunos atendidos." adicionado ao fim da seção
+- **Experiência do aluno**: parágrafo de abertura reescrito ("Você não precisa configurar nada…") + sub-linha "Sem App Store. Sem Play Store. Sem atrito."
+- **Sem/Com Kinevia**: reestruturado — 4 itens texto corrido na coluna Sem, 5 itens na coluna Com; coluna Com em Cormorant INK peso 500 (era GOLD itálico 300, visualmente apagado)
+- **Depoimento**: frase de destaque em fonte maior e centralizada + texto de suporte separado; assinatura em duas linhas (nome / ocupação)
+- **Última dobra**: "Comece com clareza" → "Teste o Kinevia por 15 dias" + "Descubra quanto tempo…" + "Sem cartão. Cancele quando quiser."
+- **CTA pricing**: "Crie sua conta em 2 minutos." + ancoragem de preço "Um valor fixo. Sem cobrança por aluno." + "Funciona para quem tem 5 alunos ou 50."
+- **Validação**: zero travessões, zero exclamações, zero emojis; "Na Kinevia" corrigido para "No Kinevia"
+- Deploy em produção ✓
+
+---
 
 ### Sessão 24 — Página de vendas /trial + analytics próprio
 

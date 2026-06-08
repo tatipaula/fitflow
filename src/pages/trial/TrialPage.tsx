@@ -325,7 +325,7 @@ export default function TrialPage() {
   }, [phase])
 
   function handleCta(position: string) {
-    track('cta_click', { position, label: 'Começar — 15 dias grátis' })
+    track('cta_click', { position, label: 'Começar, 15 dias grátis' })
     navigate('/login')
   }
 
@@ -347,7 +347,7 @@ export default function TrialPage() {
             letterSpacing: '0.01em',
           }}
         >
-          Começar — 15 dias grátis
+          Começar, 15 dias grátis
         </button>
         <div style={sans(13, STONE, { fontWeight: 300 })}>
           Sem cartão. R$49/mês depois.
@@ -418,9 +418,15 @@ export default function TrialPage() {
               Você grava<br />o treino.<br />
               <em style={{ color: GOLD }}>o Kinevia faz o resto.</em>
             </h1>
-            <p style={sans(16, STONE, { fontWeight: 300, lineHeight: 1.8, margin: '0 0 36px', maxWidth: 360 })}>
-              Fale a prescrição. O Kinevia transcreve, estrutura e monta a ficha — pronta para o aluno em minutos.
+            <p style={sans(16, STONE, { fontWeight: 300, lineHeight: 1.65, margin: '0 0 12px', maxWidth: 360 })}>
+              Transforme 15 a 20 minutos de montagem em cerca de 2 minutos usando voz e IA.
             </p>
+            <p style={sans(15, STONE, { fontWeight: 300, lineHeight: 1.75, margin: '0 0 28px', maxWidth: 360 })}>
+              Grave a prescrição. O Kinevia transcreve, estrutura e entrega a ficha pronta para o aluno.
+            </p>
+            <div style={sans(13, STONE, { fontWeight: 300, marginBottom: 12 })}>
+              15 dias grátis. Sem cartão de crédito.
+            </div>
             <button
               onClick={() => handleCta('hero')}
               style={{
@@ -433,7 +439,7 @@ export default function TrialPage() {
                 letterSpacing: '0.01em',
               }}
             >
-              Começar — 15 dias grátis
+              Começar, 15 dias grátis
             </button>
             <div style={sans(13, STONE, { fontWeight: 300 })}>
               Sem cartão. R$49/mês depois.
@@ -461,9 +467,9 @@ export default function TrialPage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 48 }}>
             {[
-              { step: '01 · GRAVAR',     desc: 'Grave a prescrição em áudio. Em segundos.' },
-              { step: '02 · ESTRUTURAR', desc: 'O Kinevia transcreve e monta a ficha completa.' },
-              { step: '03 · ENVIAR',     desc: 'A ficha chega ao aluno, pronta para executar.' },
+              { step: '01 · GRAVE',     desc: 'Fale o treino como já faz hoje.' },
+              { step: '02 · ESTRUTURE', desc: 'O Kinevia transforma sua prescrição em uma ficha completa.' },
+              { step: '03 · ENVIE',     desc: 'O aluno recebe o treino imediatamente.' },
             ].map(({ step, desc }) => (
               <div key={step}>
                 <div style={mono(10, GOLD, { letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12 })}>
@@ -475,6 +481,14 @@ export default function TrialPage() {
                 </p>
               </div>
             ))}
+          </div>
+          <div style={{ marginTop: 48, borderTop: '1px solid rgba(200,169,110,0.15)', paddingTop: 28 }}>
+            <div style={mono(10, GOLD, { letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12 })}>
+              Resultado
+            </div>
+            <p style={sans(16, STONE, { fontWeight: 300, lineHeight: 1.75, margin: 0 })}>
+              Menos digitação. Menos retrabalho. Mais alunos atendidos.
+            </p>
           </div>
         </div>
         <div style={{ position: 'absolute', bottom: 0, left: 40, right: 40, height: 1, background: `linear-gradient(90deg, transparent, ${GOLD}, transparent)`, opacity: 0.2 }} />
@@ -497,10 +511,13 @@ export default function TrialPage() {
           <p style={cormorant('clamp(24px, 3.5vw, 36px)', INK, {
             fontWeight: 300,
             lineHeight: 1.35,
-            margin: '0 0 56px',
+            margin: '0 0 16px',
             maxWidth: 560,
           })}>
-            O aluno não instala nada. Você envia um link. Ele cria a conta em minutos e já acessa o treino montado por você.
+            Você não precisa configurar nada. Envia um link. O aluno faz o resto.
+          </p>
+          <p style={sans(16, STONE, { fontWeight: 300, lineHeight: 1.65, margin: '0 0 56px', maxWidth: 560 })}>
+            Sem App Store. Sem Play Store. Sem atrito.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 40 }}>
             {[
@@ -542,16 +559,14 @@ export default function TrialPage() {
               <div style={mono(10, STONE, { letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 28 })}>
                 Sem Kinevia
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {[
-                  { metric: '15–20 min',  label: 'montar uma ficha' },
-                  { metric: 'Manual',     label: 'cobrança do aluno' },
-                  { metric: 'Nenhum',     label: 'registro de evolução de carga' },
-                ].map(({ metric, label }) => (
-                  <div key={label}>
-                    <div style={cormorant(30, INK, { fontWeight: 300, lineHeight: 1 })}>{metric}</div>
-                    <div style={sans(13, STONE, { marginTop: 4 })}>{label}</div>
-                  </div>
+                  '15 a 20 minutos para montar cada ficha',
+                  'Cobrança manual',
+                  'Sem histórico de evolução',
+                  'Acompanhamento fragmentado',
+                ].map((item) => (
+                  <div key={item} style={sans(15, STONE, { fontWeight: 300, lineHeight: 1.5 })}>{item}</div>
                 ))}
               </div>
             </div>
@@ -560,23 +575,22 @@ export default function TrialPage() {
               <div style={mono(10, GOLD, { letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 28 })}>
                 Com Kinevia
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {[
-                  { metric: '~2 min',        label: 'montar uma ficha' },
-                  { metric: 'Automático',    label: 'lembrete com Pix pronto' },
-                  { metric: 'Por exercício', label: 'gráfico de evolução de carga' },
-                ].map(({ metric, label }) => (
-                  <div key={label}>
-                    <div style={cormorant(30, GOLD, { fontStyle: 'italic', fontWeight: 300, lineHeight: 1 })}>{metric}</div>
-                    <div style={sans(13, STONE, { marginTop: 4 })}>{label}</div>
-                  </div>
+                  'Cerca de 2 minutos por ficha',
+                  'Lembrete automático de pagamento',
+                  'Histórico completo do aluno',
+                  'Evolução de carga por exercício',
+                  'Alunos ilimitados por R$49/mês',
+                ].map((item) => (
+                  <div key={item} style={cormorant(24, INK, { fontWeight: 500, lineHeight: 1.4 })}>{item}</div>
                 ))}
               </div>
             </div>
           </div>
           <div style={{ marginTop: 52, borderTop: '1px solid rgba(28,26,23,0.1)', paddingTop: 32 }}>
             <p style={sans(16, STONE, { fontWeight: 300, lineHeight: 1.85, maxWidth: 560, margin: 0 })}>
-              Montar uma ficha à mão leva de 15 a 20 minutos. Na Kinevia, leva cerca de dois. O tempo que sai do operacional é tempo que você decide como usar — mais alunos, ou menos noites trabalhando.
+              Montar uma ficha à mão leva de 15 a 20 minutos. No Kinevia, leva cerca de dois. O tempo que sai do operacional é tempo que você decide como usar: mais alunos, ou menos noites trabalhando.
             </p>
             <p style={sans(15, STONE, { fontWeight: 300, lineHeight: 1.75, maxWidth: 560, margin: '24px 0 0' })}>
               Lembrete de cobrança automático, com o Pix pronto. Você para de esquecer de cobrar o que já ganhou.
@@ -593,18 +607,24 @@ export default function TrialPage() {
           padding: 'clamp(64px, 10vh, 100px) clamp(16px, 5vw, 40px)',
         }}
       >
-        <div style={{ maxWidth: 720, margin: '0 auto' }}>
-          <div style={{ width: 28, height: 1, background: GOLD, opacity: 0.7, marginBottom: 36 }} />
-          <blockquote style={cormorant('clamp(20px, 3vw, 28px)', INK, {
+        <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
+          <div style={{ width: 28, height: 1, background: GOLD, opacity: 0.7, margin: '0 auto 36px' }} />
+          <blockquote style={cormorant('clamp(26px, 3.5vw, 40px)', INK, {
             fontStyle: 'italic',
             fontWeight: 300,
-            lineHeight: 1.55,
-            margin: '0 0 32px',
+            lineHeight: 1.4,
+            margin: '0 0 28px',
           })}>
-            "O aplicativo tem facilitado muito minha rotina como personal trainer. Um dos grandes diferenciais é a integração com inteligência artificial, que permite a criação de treinos de forma rápida e prática. Basta enviar um áudio informando os exercícios, número de séries, repetições e observações, e o sistema monta o treino automaticamente, eliminando a necessidade de navegar por diversas abas e realizar digitação manual."
+            "Basta enviar um áudio com os exercícios, séries e repetições e o sistema monta o treino automaticamente."
           </blockquote>
+          <p style={sans(15, STONE, { fontWeight: 300, lineHeight: 1.75, margin: '0 auto 32px', maxWidth: 520 })}>
+            Antes eu navegava por várias abas e digitava tudo manualmente. Hoje uso o Kinevia para prescrição, cobranças e acompanhamento de evolução. É uma ferramenta que agrega valor pro profissional e pro aluno.
+          </p>
           <div style={mono(10, STONE, { letterSpacing: '0.14em', textTransform: 'uppercase' })}>
-            Marcos Matias Xavier · Personal Trainer
+            Marcos Matias Xavier
+          </div>
+          <div style={mono(10, STONE, { letterSpacing: '0.14em', textTransform: 'uppercase', marginTop: 4 })}>
+            Personal Trainer
           </div>
         </div>
       </section>
@@ -627,10 +647,13 @@ export default function TrialPage() {
             lineHeight: 1.05,
             margin: '0 0 16px',
           })}>
-            Comece com <em style={{ color: GOLD }}>clareza.</em>
+            Teste o Kinevia por <em style={{ color: GOLD }}>15 dias.</em>
           </h2>
-          <p style={sans(16, STONE, { fontWeight: 300, lineHeight: 1.65, margin: '0 0 44px' })}>
-            15 dias de acesso completo. Sem cartão.
+          <p style={sans(16, STONE, { fontWeight: 300, lineHeight: 1.65, margin: '0 0 8px' })}>
+            Descubra quanto tempo você realmente gasta montando fichas.
+          </p>
+          <p style={sans(15, STONE, { fontWeight: 300, lineHeight: 1.65, margin: '0 0 44px' })}>
+            Sem cartão. Cancele quando quiser.
           </p>
           <button
             onClick={() => handleCta('pricing')}
@@ -647,8 +670,17 @@ export default function TrialPage() {
           >
             Começar agora
           </button>
-          <div style={sans(13, STONE, { fontWeight: 300 })}>
+          <div style={sans(13, STONE, { fontWeight: 300, marginBottom: 12 })}>
+            Crie sua conta em 2 minutos.
+          </div>
+          <div style={sans(13, STONE, { fontWeight: 300, marginBottom: 8 })}>
             R$49/mês depois do trial.
+          </div>
+          <div style={sans(13, STONE, { fontWeight: 300, marginBottom: 4 })}>
+            Um valor fixo. Sem cobrança por aluno. Sem surpresa no bolso.
+          </div>
+          <div style={sans(13, STONE, { fontWeight: 300 })}>
+            Funciona para quem tem 5 alunos ou 50.
           </div>
         </div>
       </section>
