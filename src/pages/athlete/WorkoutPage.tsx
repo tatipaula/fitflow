@@ -55,6 +55,7 @@ export default function WorkoutPage() {
   const [rankingPosition, setRankingPosition] = useState<AthleteRankingPosition | null>(null)
   const [activeProgram, setActiveProgram] = useState<Program | null>(null)
   const [programExpanded, setProgramExpanded] = useState(false)
+  const [selectedProgressExercise, setSelectedProgressExercise] = useState('')
 
   useEffect(() => {
     if (!athlete) { setLoading(false); return }
@@ -405,17 +406,24 @@ export default function WorkoutPage() {
     return Object.entries(byWeek).slice(-6).map(([week, count]) => ({ week, count }))
   }, [sessions])
 
-  const exerciseLoadData = useMemo(() => {
-    const map: Record<string, { best: number; last: number }> = {}
-    sessions.forEach((s) => {
-      s.set_logs.filter((l) => !l.deleted && l.weight_kg !== null).forEach((l) => {
+  const exerciseProgressData = useMemo(() => {
+    const map: Record<string, { date: string; weight: number }[]> = {}
+    ;[...sessions].sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime()).forEach((s) => {
+      const dateLabel = new Date(s.started_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+      const maxByEx: Record<string, number> = {}
+      s.set_logs.filter((l) => !l.deleted && l.weight_kg !== null && l.weight_kg > 0).forEach((l) => {
         const name = l.exercises.name
-        if (!map[name]) map[name] = { best: 0, last: 0 }
-        map[name].last = l.weight_kg!
-        map[name].best = Math.max(map[name].best, l.weight_kg!)
+        maxByEx[name] = Math.max(maxByEx[name] ?? 0, l.weight_kg!)
+      })
+      Object.entries(maxByEx).forEach(([name, weight]) => {
+        if (!map[name]) map[name] = []
+        map[name].push({ date: dateLabel, weight })
       })
     })
-    return Object.entries(map).map(([name, { best, last }]) => ({ name, best, last }))
+    return Object.entries(map)
+      .filter(([, pts]) => pts.length >= 2)
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([name, points]) => ({ name, points }))
   }, [sessions])
 
   // ── Loading ───────────────────────────────────────────────────────────────
@@ -847,31 +855,65 @@ export default function WorkoutPage() {
               </div>
             )}
 
-            {exerciseLoadData.length > 0 && (
-              <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: 18, marginBottom: 8 }}>
-                <div className="eyebrow" style={{ marginBottom: 16 }}>Evolução de carga</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {exerciseLoadData.map(({ name, best, last }) => {
-                    const pct = best > 0 ? Math.round((last / best) * 100) : 100
-                    return (
-                      <div key={name}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <span style={{ fontSize: 13, color: 'var(--fg-1)' }}>{name}</span>
-                          <span className="num" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{last} kg</span>
-                        </div>
-                        <div style={{ height: 4, background: 'var(--ink-4)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 2, transition: 'width 0.5s ease' }}/>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                          <span style={{ fontSize: 9, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace" }}>0 kg</span>
-                          <span style={{ fontSize: 9, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace" }}>máx {best} kg</span>
-                        </div>
+            {exerciseProgressData.length > 0 && (() => {
+              const exName = selectedProgressExercise || exerciseProgressData[0].name
+              const selected = exerciseProgressData.find((e) => e.name === exName) ?? exerciseProgressData[0]
+              const first = selected.points[0]
+              const last  = selected.points[selected.points.length - 1]
+              const delta = last.weight - first.weight
+              const deltaPct = first.weight > 0 ? Math.round((delta / first.weight) * 100) : 0
+              return (
+                <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: 18, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+                    <div className="eyebrow">Evolução de carga</div>
+                    <select
+                      value={exName}
+                      onChange={(e) => setSelectedProgressExercise(e.target.value)}
+                      style={{ height: 30, padding: '0 8px', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 11, color: 'var(--fg-1)', outline: 'none', maxWidth: 180 }}
+                    >
+                      {exerciseProgressData.map((ex) => (
+                        <option key={ex.name} value={ex.name}>{ex.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Resumo início → agora */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, padding: '10px 14px', background: 'var(--ink-3)', borderRadius: 'var(--r-md)' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div className="num" style={{ fontSize: 18, color: 'var(--fg-2)' }}>{first.weight} kg</div>
+                      <div style={{ fontSize: 9, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>{first.date}</div>
+                    </div>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <div style={{ fontSize: 9, color: delta >= 0 ? 'var(--accent)' : 'var(--danger)', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
+                        {delta >= 0 ? '+' : ''}{delta} kg ({deltaPct >= 0 ? '+' : ''}{deltaPct}%)
                       </div>
-                    )
-                  })}
+                      <div style={{ width: '100%', height: 1, background: 'var(--ink-4)' }}/>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div className="num" style={{ fontSize: 18, color: 'var(--accent)' }}>{last.weight} kg</div>
+                      <div style={{ fontSize: 9, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>{last.date}</div>
+                    </div>
+                  </div>
+
+                  {/* Gráfico de progressão */}
+                  <div style={{ overflow: 'hidden' }}>
+                    <ResponsiveContainer width="99%" height={140}>
+                      <LineChart data={selected.points} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--ink-4)" vertical={false}/>
+                        <XAxis dataKey="date" tick={{ fill: 'var(--fg-4)', fontSize: 9, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} interval="preserveStartEnd"/>
+                        <YAxis tick={{ fill: 'var(--fg-4)', fontSize: 9, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} unit="kg" width={36}/>
+                        <Tooltip
+                          contentStyle={{ background: 'var(--ink-3)', border: '1px solid var(--ink-4)', borderRadius: 8, fontSize: 11 }}
+                          labelStyle={{ color: 'var(--fg-2)' }}
+                          formatter={(v: number) => [`${v} kg`, 'Carga máx.']}
+                        />
+                        <Line type="monotone" dataKey="weight" stroke="var(--accent)" strokeWidth={2} dot={{ fill: 'var(--accent)', r: 3 }} activeDot={{ r: 5 }}/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
           </div>
         )}
         {bottomNav}
