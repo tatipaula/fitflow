@@ -1,10 +1,19 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-08 (sessão 26)
+## Última atualização: 2026-06-08 (sessão 27)
 
 ---
 
 ## Concluído
+
+### Sessão 27 — Meta Pixel
+
+- Pixel `1611941487599974` adicionado ao `index.html` (fornecido pela agência)
+- `<script>` no `<head>`; `<noscript>` movido para o `<body>` (parser HTML5 do `vite-plugin-pwa` não permite `<img>` dentro de `<noscript>` no `<head>`)
+- Dispara `PageView` em todas as rotas, incluindo `/trial` (destino dos anúncios)
+- Deploy em produção ✓
+
+---
 
 ### Sessão 26 — Histórico de pagamentos, seleção de método de prescrição, evolução de carga e insights Oura Ring
 
