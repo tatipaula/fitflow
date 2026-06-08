@@ -1,10 +1,43 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-08 (sessão 25)
+## Última atualização: 2026-06-08 (sessão 26)
 
 ---
 
 ## Concluído
+
+### Sessão 26 — Histórico de pagamentos, seleção de método de prescrição, evolução de carga e insights Oura Ring
+
+#### Histórico de pagamentos (`payment_logs`)
+- Tabela `payment_logs` criada (migration `20260608000001_payment_logs.sql`) com campos `athlete_id`, `trainer_id`, `paid_at`, `amount`, `confirmed_by` (trainer | athlete), RLS para ambos os lados
+- Interface `PaymentLog` adicionada a `src/types/index.ts`
+- `confirmPayment` em `api.ts` atualizado: além de gravar `last_paid_at` no atleta, insere log com quem confirmou
+- `getPaymentLogs` adicionado a `api.ts`: retorna até 24 lançamentos ordenados por data desc
+- Dashboard do trainer: card "Histórico de pagamentos" exibido no detalhe do atleta quando `billing_day` está configurado; ponto dourado = confirmado pelo atleta, cinza = pelo trainer
+- Atleta: botão "Paguei ✓" no WorkoutPage grava `confirmed_by: 'athlete'`
+- Seed de dados de teste para Arnold: 24 sessões em 12 semanas com progressão de 2.5%/semana nos 5 exercícios base (`seed_arnold.sql`)
+
+#### Seleção de método de prescrição (audio vs biblioteca)
+- Substituído card único de áudio por grade 2 colunas no DashboardPage:
+  - **Gravar áudio**: card clicável → `inputMode = 'audio'`, abre gravação
+  - **Biblioteca**: card clicável → `inputMode = 'text'`, abre biblioteca de exercícios
+- Estado vazio do detalhe do atleta: dois botões lado a lado com o mesmo split
+
+#### Gráfico de progressão de carga por exercício
+- Evolution tab do WorkoutPage (aluno) agora inclui:
+  - Dropdown para selecionar exercício (apenas exercícios com ≥ 2 pontos históricos, ordenados por frequência)
+  - Card âncora "Início X kg → Hoje Y kg (+Z%)" calculado em `useMemo` sobre `sessions` existentes
+  - LineChart com CartesianGrid mostrando carga máxima por sessão ao longo do tempo
+- Lógica em `exerciseProgressData` useMemo: agrupa por exercício, pega máximo por sessão, ordena cronologicamente
+
+#### Insights Oura Ring-style
+- Tira horizontal scrollável no topo da aba Evolução do aluno
+- Cada card: borda esquerda 3px verde/vermelho/neutro, número delta grande, label mono pequeno
+- Indicadores calculados: delta de carga por exercício (último vs penúltimo), delta de volume total (%), delta de frequência semanal (esta semana vs anterior)
+- Limitado a 8 cards, ordenados por magnitude absoluta do delta
+- Deploy em produção ✓
+
+---
 
 ### Sessão 25 — Revisão de copy da página /trial
 
@@ -312,7 +345,6 @@
 
 ## Backlog
 
-- Histórico de pagamentos por mês (requer tabela `payment_logs`)
-- Métricas de evolução de cargas por exercício (histórico comparável)
+- **Integração Meta Ads no /trial/stats**: trazer custo por campanha, CPM, cliques e CTR via Meta Marketing API. Implementar como Supabase Edge Function (token seguro no servidor). Pré-requisitos: Ad Account ID (`act_XXXXXXXXX`) e System User token com permissão `ads_read`. Aguardando agência finalizar configuração das campanhas.
 - Integração WhatsApp para notificações de cobrança
 - Auto-completar programa via trigger já implementado — validar em produção com dados reais
