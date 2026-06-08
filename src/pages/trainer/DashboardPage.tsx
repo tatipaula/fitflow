@@ -786,21 +786,38 @@ export default function DashboardPage() {
           )}
         </Card>
 
-        {/* Audio CTA */}
-        <Card style={{ padding: '32px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 16, position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: 0, left: 40, right: 40, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.5 }}/>
-          <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {KVIcon.mic(22, 'var(--accent)')}
-          </div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--accent)', marginBottom: 8 }}>Criação por Áudio</div>
-            <div style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.6 }}>Grave um áudio descrevendo o treino e a IA estrutura tudo automaticamente.</div>
-          </div>
-          <button onClick={() => setView('recording')}
-            style={{ height: 46, padding: '0 24px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {KVIcon.mic(16, 'var(--accent-ink)')} Gravar Treino
+        {/* Prescrição — dois métodos */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <button
+            onClick={() => { setInputMode('audio'); setView('recording') }}
+            style={{ padding: '28px 16px', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 14, cursor: 'pointer', position: 'relative', overflow: 'hidden', transition: 'border-color 0.15s' }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--ink-4)')}
+          >
+            <div style={{ position: 'absolute', top: 0, left: 24, right: 24, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.5 }}/>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--accent-soft)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {KVIcon.mic(22, 'var(--accent)')}
+            </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--accent)', marginBottom: 6 }}>Gravar áudio</div>
+              <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.55 }}>Fale o treino e a IA monta a ficha.</div>
+            </div>
           </button>
-        </Card>
+          <button
+            onClick={() => { setInputMode('text'); setShowLibrary(true); setView('recording') }}
+            style={{ padding: '28px 16px', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 14, cursor: 'pointer', position: 'relative', overflow: 'hidden', transition: 'border-color 0.15s' }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--fg-3)')}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--ink-4)')}
+          >
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--fg-2)" strokeWidth="1.5" strokeLinecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--fg-1)', marginBottom: 6 }}>Biblioteca</div>
+              <div style={{ fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.55 }}>Monte o treino selecionando exercícios.</div>
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Pix key */}
@@ -1930,10 +1947,17 @@ export default function DashboardPage() {
                 {isEmpty ? (
                   <Card style={{ padding: '28px 24px', textAlign: 'center' }}>
                     <div style={{ fontSize: 14, color: 'var(--fg-3)', marginBottom: 16 }}>Nenhum treino criado para este aluno ainda.</div>
-                    <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
-                      style={{ height: 42, padding: '0 20px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      {KVIcon.mic(16, 'var(--accent-ink)')} Criar primeiro treino
-                    </button>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setInputMode('audio'); setView('recording') }}
+                        style={{ height: 42, padding: '0 20px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        {KVIcon.mic(15, 'var(--accent-ink)')} Gravar áudio
+                      </button>
+                      <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setInputMode('text'); setShowLibrary(true); setView('recording') }}
+                        style={{ height: 42, padding: '0 20px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-2)', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
+                        Biblioteca
+                      </button>
+                    </div>
                   </Card>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
