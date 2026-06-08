@@ -426,6 +426,57 @@ export default function WorkoutPage() {
       .map(([name, points]) => ({ name, points }))
   }, [sessions])
 
+  const evolutionInsights = useMemo(() => {
+    type Insight = { key: string; label: string; sub: string; delta: number; unit: string }
+    const items: Insight[] = []
+    const sorted = [...sessions].sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime())
+
+    // Carga por exercício: compara últimos dois pontos
+    exerciseProgressData.forEach(({ name, points }) => {
+      if (points.length < 2) return
+      const last = points[points.length - 1]
+      const prev = points[points.length - 2]
+      const delta = +(last.weight - prev.weight).toFixed(1)
+      if (delta === 0) return
+      items.push({ key: name, label: name, sub: `carga · ${last.date}`, delta, unit: ' kg' })
+    })
+
+    // Volume: última sessão vs anterior
+    if (sorted.length >= 2) {
+      const vol = (s: typeof sorted[0]) =>
+        s.set_logs.filter((l) => !l.deleted).reduce((sum, l) => sum + l.reps_done * (l.weight_kg ?? 1), 0)
+      const lastVol = vol(sorted[sorted.length - 1])
+      const prevVol = vol(sorted[sorted.length - 2])
+      if (prevVol > 0) {
+        const delta = Math.round(((lastVol - prevVol) / prevVol) * 100)
+        items.push({ key: '__vol', label: 'Volume', sub: 'vs sessão anterior', delta, unit: '%' })
+      }
+    }
+
+    // Frequência: esta semana vs semana anterior
+    const now = new Date()
+    const thisWeekStart = new Date(now)
+    thisWeekStart.setDate(now.getDate() - now.getDay())
+    thisWeekStart.setHours(0, 0, 0, 0)
+    const lastWeekStart = new Date(thisWeekStart)
+    lastWeekStart.setDate(thisWeekStart.getDate() - 7)
+    const thisWeek  = sorted.filter((s) => new Date(s.started_at) >= thisWeekStart).length
+    const lastWeekN = sorted.filter((s) => { const d = new Date(s.started_at); return d >= lastWeekStart && d < thisWeekStart }).length
+    const freqDelta = thisWeek - lastWeekN
+    items.push({
+      key: '__freq',
+      label: 'Frequência',
+      sub: `${thisWeek} treino${thisWeek !== 1 ? 's' : ''} esta semana`,
+      delta: freqDelta,
+      unit: '',
+    })
+
+    // Ordena: positivos → negativos → neutros; limita a 8
+    return items
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+      .slice(0, 8)
+  }, [sessions, exerciseProgressData])
+
   // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) return (
     <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -818,6 +869,44 @@ export default function WorkoutPage() {
           </div>
         ) : (
           <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
+
+            {/* Destaques — Oura-style */}
+            {evolutionInsights.length > 0 && (
+              <div style={{ overflowX: 'auto', marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20, paddingBottom: 4 }}>
+                <div style={{ display: 'flex', gap: 10, minWidth: 'max-content' }}>
+                  {evolutionInsights.map(({ key, label, sub, delta, unit }) => {
+                    const positive = delta > 0
+                    const negative = delta < 0
+                    const color     = positive ? '#4ade80' : negative ? '#f87171' : 'var(--fg-4)'
+                    const borderClr = positive ? 'rgba(74,222,128,0.25)' : negative ? 'rgba(248,113,113,0.25)' : 'var(--ink-4)'
+                    const arrow     = positive ? '↑' : negative ? '↓' : '→'
+                    return (
+                      <div key={key} style={{
+                        background: 'var(--ink-2)',
+                        border: `1px solid ${borderClr}`,
+                        borderLeft: `3px solid ${color}`,
+                        borderRadius: 'var(--r-lg)',
+                        padding: '12px 14px',
+                        minWidth: 128,
+                        maxWidth: 160,
+                        flexShrink: 0,
+                      }}>
+                        <div style={{ fontSize: 9, color: 'var(--fg-4)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {label}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                          <span style={{ fontSize: 9, color, fontFamily: "'JetBrains Mono', monospace" }}>{arrow}</span>
+                          <span className="num" style={{ fontSize: 22, color, lineHeight: 1, fontWeight: 700 }}>
+                            {positive ? '+' : ''}{delta}{unit}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 5 }}>{sub}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {volumeData.length > 1 && (
               <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-lg)', padding: 18 }}>
