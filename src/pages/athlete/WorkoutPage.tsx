@@ -512,7 +512,7 @@ export default function WorkoutPage() {
   async function handleConfirmPayment(date?: string) {
     if (!athlete) return
     setConfirmingPayment(true)
-    const ok = await confirmPayment(athlete.id, date)
+    const ok = await confirmPayment(athlete.id, date, 'athlete')
     if (ok) {
       if (date) {
         const updated = { ...billingAthlete!, last_paid_at: date }

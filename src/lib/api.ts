@@ -693,13 +693,42 @@ export function calcOverdueMonths(athlete: Athlete): number {
   return count
 }
 
-export async function confirmPayment(athleteId: string, date?: string): Promise<boolean> {
+export async function confirmPayment(
+  athleteId: string,
+  date?: string,
+  confirmedBy: 'trainer' | 'athlete' = 'trainer',
+): Promise<boolean> {
   const paidAt = date ?? new Date().toISOString().split('T')[0]
   const { error } = await supabase
     .from('athletes')
     .update({ last_paid_at: paidAt })
     .eq('id', athleteId)
-  return !error
+  if (error) return false
+  const { data: athlete } = await supabase
+    .from('athletes')
+    .select('trainer_id, billing_amount')
+    .eq('id', athleteId)
+    .single()
+  if (athlete) {
+    await supabase.from('payment_logs').insert({
+      athlete_id: athleteId,
+      trainer_id: athlete.trainer_id,
+      paid_at: paidAt,
+      amount: athlete.billing_amount,
+      confirmed_by: confirmedBy,
+    })
+  }
+  return true
+}
+
+export async function getPaymentLogs(athleteId: string) {
+  const { data, error } = await supabase
+    .from('payment_logs')
+    .select('*')
+    .eq('athlete_id', athleteId)
+    .order('paid_at', { ascending: false })
+    .limit(24)
+  return error ? [] : (data ?? [])
 }
 
 export async function updateAthleteBilling(

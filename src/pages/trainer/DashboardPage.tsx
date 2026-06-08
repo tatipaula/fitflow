@@ -14,9 +14,10 @@ import {
   getAthleteRankingStats, getBadgesByTrainer, createBadge, deleteBadge,
   getProgramsByAthlete, createProgram, assignWorkoutToProgram, removeWorkoutFromProgram,
   getTrainerPrograms, confirmPayment, calcOverdueMonths, getAthleteEvolution,
-  trialDaysLeft, createCheckoutSession,
+  trialDaysLeft, createCheckoutSession, getPaymentLogs,
 } from '@/lib/api'
 import type { AthleteEvolution } from '@/lib/api'
+import type { PaymentLog } from '@/types'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
 import { EXERCISE_LIBRARY } from '@/lib/exerciseLibrary'
 import type { Athlete, AthleteRankingStats, Badge, Program, ProgramWithWorkouts, Workout, Exercise, Invite, ParqResponse, ClassCheckin } from '@/types'
@@ -72,6 +73,7 @@ export default function DashboardPage() {
   const [selectedAthleteForDetail, setSelectedAthleteForDetail] = useState<Athlete | null>(null)
   const [athleteParq, setAthleteParq] = useState<ParqResponse | null | undefined>(undefined)
   const [loadingAthleteDetail, setLoadingAthleteDetail] = useState(false)
+  const [paymentLogs, setPaymentLogs] = useState<PaymentLog[]>([])
 
   // Check-in
   const [checkinCounts, setCheckinCounts] = useState<Record<string, number>>({})
@@ -244,20 +246,23 @@ export default function DashboardPage() {
     setShowNewProgramDetailForm(false)
     setEvolutionData(null)
     setSelectedExerciseName('')
+    setPaymentLogs([])
     setView('athlete-detail')
     setLoadingAthleteDetail(true)
     setLoadingEvolution(true)
-    const [parq, checkins, programs, evolution] = await Promise.all([
+    const [parq, checkins, programs, evolution, logs] = await Promise.all([
       getParqResponse(athlete.id),
       getAthleteCheckins(athlete.id),
       getProgramsByAthlete(athlete.id),
       getAthleteEvolution(athlete.id),
+      getPaymentLogs(athlete.id),
     ])
     setAthleteParq(parq)
     setAthleteCheckins(checkins)
     setAthleteDetailPrograms(programs)
     setEvolutionData(evolution)
     setSelectedExerciseName(evolution.exercises[0]?.name ?? '')
+    setPaymentLogs(logs)
     setLoadingAthleteDetail(false)
     setLoadingEvolution(false)
   }
@@ -544,10 +549,14 @@ export default function DashboardPage() {
 
   async function handleConfirmPaymentTrainer(athleteId: string, date?: string) {
     setConfirmingPaymentId(athleteId)
-    const ok = await confirmPayment(athleteId, date)
+    const ok = await confirmPayment(athleteId, date, 'trainer')
     if (ok) {
       const paidAt = date ?? new Date().toISOString().split('T')[0]
       setAthletes((p) => p.map((a) => a.id === athleteId ? { ...a, last_paid_at: paidAt } : a))
+      if (selectedAthleteForDetail?.id === athleteId) {
+        const logs = await getPaymentLogs(athleteId)
+        setPaymentLogs(logs)
+      }
     }
     setConfirmingPaymentId(null)
   }
@@ -2259,6 +2268,49 @@ export default function DashboardPage() {
               )}
             </Card>
           </div>
+
+          {/* Histórico de pagamentos */}
+          {selectedAthleteForDetail.billing_day && (
+            <div style={{ marginTop: 24, marginBottom: 24 }}>
+              <div className="eyebrow" style={{ marginBottom: 12 }}>Histórico de pagamentos</div>
+              <Card style={{ padding: '14px 16px' }}>
+                {paymentLogs.length === 0 ? (
+                  <div style={{ fontSize: 13, color: 'var(--fg-3)', textAlign: 'center', padding: '8px 0' }}>
+                    Nenhum pagamento registrado ainda.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    {paymentLogs.map((log, i) => {
+                      const [y, m, d] = log.paid_at.split('-')
+                      const dateLabel = `${d}/${m}/${y}`
+                      return (
+                        <div key={log.id} style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '10px 0',
+                          borderBottom: i < paymentLogs.length - 1 ? '1px solid var(--ink-5)' : 'none',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: log.confirmed_by === 'athlete' ? 'var(--accent)' : 'var(--fg-3)', flexShrink: 0 }} />
+                            <div>
+                              <div style={{ fontSize: 14, color: 'var(--fg-1)', fontWeight: 500 }}>{dateLabel}</div>
+                              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 1 }}>
+                                {log.confirmed_by === 'athlete' ? 'confirmado pelo aluno' : 'confirmado por você'}
+                              </div>
+                            </div>
+                          </div>
+                          {log.amount != null && (
+                            <div className="num" style={{ fontSize: 15, color: 'var(--fg-1)' }}>
+                              R$ {Number(log.amount).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
 
           {/* Histórico de aulas */}
           <div style={{ marginTop: 24 }}>

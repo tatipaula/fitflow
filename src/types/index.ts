@@ -58,6 +58,16 @@ export interface Athlete {
   avatar_url: string | null
 }
 
+export interface PaymentLog {
+  id: string
+  athlete_id: string
+  trainer_id: string
+  paid_at: string
+  amount: number | null
+  confirmed_by: 'trainer' | 'athlete'
+  created_at: string
+}
+
 export interface Badge {
   id: string
   trainer_id: string
