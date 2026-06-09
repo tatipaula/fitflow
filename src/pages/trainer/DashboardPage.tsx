@@ -342,16 +342,16 @@ export default function DashboardPage() {
     window.open(`https://wa.me/${athlete.phone.replace(/\D/g, '')}?text=${msg}`, '_blank')
   }
 
-  async function handleSendAthleteAccess(athlete: Athlete) {
+  async function handleSendAthleteAccess(athlete: Athlete, channel: 'email' | 'whatsapp' | 'copy') {
     if (!trainer || !athlete.invite_token) return
     setSendingAccess(athlete.id)
     const inviteLink = `${window.location.origin}/convite/${athlete.invite_token}`
     try {
-      if (athlete.email) {
+      if (channel === 'email' && athlete.email) {
         await supabase.functions.invoke('send-invite', {
           body: { athlete_name: athlete.name, athlete_email: athlete.email, trainer_name: trainer.name, invite_link: inviteLink },
         })
-      } else if (athlete.phone) {
+      } else if (channel === 'whatsapp' && athlete.phone) {
         const msg = encodeURIComponent(
           `Olá, ${athlete.name}! ${trainer.name ?? 'Seu personal'} te enviou um novo link de acesso ao Kinevia: ${inviteLink}`,
         )
@@ -1901,28 +1901,47 @@ export default function DashboardPage() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fg-2)" strokeWidth="1.8" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         </button>
         <KVAvatar name={selectedAthleteForDetail.name} size={52} tone="warm" src={selectedAthleteForDetail.avatar_url}/>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="display" style={{ fontSize: isMobile ? 24 : 30 }}>{selectedAthleteForDetail.name}</div>
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div className="display" style={{ fontSize: isMobile ? 24 : 30, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedAthleteForDetail.name}</div>
           {selectedAthleteForDetail.objective && (
-            <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4, fontStyle: 'italic' }}>{selectedAthleteForDetail.objective}</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedAthleteForDetail.objective}</div>
           )}
         </div>
         <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
-          style={{ marginLeft: 'auto', height: 38, padding: '0 16px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          style={{ marginLeft: 'auto', height: 38, padding: '0 16px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap' }}>
           {KVIcon.mic(14, 'var(--accent-ink)')} {isMobile ? '' : 'Novo treino'}
         </button>
       </div>
 
-      {/* Ação de reenvio de acesso */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20, marginTop: -12 }}>
+      {/* Reenviar acesso — seletor de canal */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+          Reenviar acesso:
+        </span>
         <button
-          onClick={() => handleSendAthleteAccess(selectedAthleteForDetail)}
-          disabled={sendingAccess === selectedAthleteForDetail.id}
-          style={{ height: 32, padding: '0 14px', borderRadius: 999, background: accessSent === selectedAthleteForDetail.id ? 'color-mix(in oklch, var(--accent), black 60%)' : 'var(--ink-3)', border: `1px solid ${accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-3)'}`, color: accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-2)', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', opacity: sendingAccess === selectedAthleteForDetail.id ? 0.6 : 1 }}>
-          {accessSent === selectedAthleteForDetail.id ? '✓ Link enviado'
-            : sendingAccess === selectedAthleteForDetail.id ? 'Enviando...'
-            : 'Reenviar link de acesso'}
+          onClick={() => handleSendAthleteAccess(selectedAthleteForDetail, 'email')}
+          disabled={!selectedAthleteForDetail.email || !!sendingAccess}
+          style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: selectedAthleteForDetail.email ? 'pointer' : 'not-allowed', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: selectedAthleteForDetail.email ? 'var(--fg-1)' : 'var(--fg-4)', opacity: sendingAccess ? 0.6 : 1 }}>
+          E-mail
         </button>
+        <button
+          onClick={() => handleSendAthleteAccess(selectedAthleteForDetail, 'whatsapp')}
+          disabled={!selectedAthleteForDetail.phone || !!sendingAccess}
+          style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: selectedAthleteForDetail.phone ? 'pointer' : 'not-allowed', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: selectedAthleteForDetail.phone ? 'var(--fg-1)' : 'var(--fg-4)', opacity: sendingAccess ? 0.6 : 1 }}>
+          WhatsApp
+        </button>
+        <button
+          onClick={() => handleSendAthleteAccess(selectedAthleteForDetail, 'copy')}
+          disabled={!!sendingAccess}
+          style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: 'pointer', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: 'var(--fg-1)', opacity: sendingAccess ? 0.6 : 1 }}>
+          Copiar link
+        </button>
+        {accessSent === selectedAthleteForDetail.id && (
+          <span style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Enviado!</span>
+        )}
+        {sendingAccess === selectedAthleteForDetail.id && (
+          <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>Enviando...</span>
+        )}
       </div>
 
       {loadingAthleteDetail ? (
