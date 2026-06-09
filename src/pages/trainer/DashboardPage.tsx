@@ -70,6 +70,7 @@ export default function DashboardPage() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [sendingAccess, setSendingAccess] = useState<string | null>(null)
   const [accessSent, setAccessSent] = useState<string | null>(null)
+  const [accessSentLabel, setAccessSentLabel] = useState<'enviado' | 'copiado'>('enviado')
 
   // Athlete detail
   const [selectedAthleteForDetail, setSelectedAthleteForDetail] = useState<Athlete | null>(null)
@@ -359,6 +360,7 @@ export default function DashboardPage() {
       } else {
         await navigator.clipboard.writeText(inviteLink)
       }
+      setAccessSentLabel(channel === 'copy' ? 'copiado' : 'enviado')
       setAccessSent(athlete.id)
       setTimeout(() => setAccessSent(null), 3000)
     } finally {
@@ -1937,7 +1939,9 @@ export default function DashboardPage() {
           Copiar link
         </button>
         {accessSent === selectedAthleteForDetail.id && (
-          <span style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Enviado!</span>
+          <span style={{ fontSize: 12, color: 'var(--accent)' }}>
+            {accessSentLabel === 'copiado' ? '✓ Link copiado!' : '✓ Enviado!'}
+          </span>
         )}
         {sendingAccess === selectedAthleteForDetail.id && (
           <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>Enviando...</span>
