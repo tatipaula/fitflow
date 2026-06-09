@@ -1907,20 +1907,22 @@ export default function DashboardPage() {
             <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4, fontStyle: 'italic' }}>{selectedAthleteForDetail.objective}</div>
           )}
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button
-            onClick={() => handleSendAthleteAccess(selectedAthleteForDetail)}
-            disabled={sendingAccess === selectedAthleteForDetail.id}
-            style={{ height: 38, padding: '0 16px', borderRadius: 999, background: accessSent === selectedAthleteForDetail.id ? 'color-mix(in oklch, var(--accent), black 60%)' : 'var(--ink-3)', border: `1px solid ${accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-3)'}`, color: accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-1)', fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', opacity: sendingAccess === selectedAthleteForDetail.id ? 0.6 : 1 }}>
-            {accessSent === selectedAthleteForDetail.id ? '✓ Enviado!'
-              : sendingAccess === selectedAthleteForDetail.id ? 'Enviando...'
-              : 'Reenviar acesso'}
-          </button>
-          <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
-            style={{ height: 38, padding: '0 16px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-            {KVIcon.mic(14, 'var(--accent-ink)')} Novo treino
-          </button>
-        </div>
+        <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
+          style={{ marginLeft: 'auto', height: 38, padding: '0 16px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {KVIcon.mic(14, 'var(--accent-ink)')} {isMobile ? '' : 'Novo treino'}
+        </button>
+      </div>
+
+      {/* Ação de reenvio de acesso */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20, marginTop: -12 }}>
+        <button
+          onClick={() => handleSendAthleteAccess(selectedAthleteForDetail)}
+          disabled={sendingAccess === selectedAthleteForDetail.id}
+          style={{ height: 32, padding: '0 14px', borderRadius: 999, background: accessSent === selectedAthleteForDetail.id ? 'color-mix(in oklch, var(--accent), black 60%)' : 'var(--ink-3)', border: `1px solid ${accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-3)'}`, color: accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-2)', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', opacity: sendingAccess === selectedAthleteForDetail.id ? 0.6 : 1 }}>
+          {accessSent === selectedAthleteForDetail.id ? '✓ Link enviado'
+            : sendingAccess === selectedAthleteForDetail.id ? 'Enviando...'
+            : 'Reenviar link de acesso'}
+        </button>
       </div>
 
       {loadingAthleteDetail ? (
