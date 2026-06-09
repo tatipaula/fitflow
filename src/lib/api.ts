@@ -799,7 +799,7 @@ export async function getAthleteRankingPosition(
 
 export async function updateAthleteProfile(
   athleteId: string,
-  data: Partial<Pick<Athlete, 'phone' | 'weight_kg' | 'birth_date' | 'height_cm' | 'objective' | 'avatar_url'>>,
+  data: Partial<Pick<Athlete, 'email' | 'phone' | 'weight_kg' | 'birth_date' | 'height_cm' | 'objective' | 'avatar_url'>>,
 ): Promise<boolean> {
   const { error } = await supabase.from('athletes').update(data).eq('id', athleteId)
   return !error

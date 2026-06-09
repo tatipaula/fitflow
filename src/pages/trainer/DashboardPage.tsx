@@ -14,7 +14,7 @@ import {
   getAthleteRankingStats, getBadgesByTrainer, createBadge, deleteBadge,
   getProgramsByAthlete, createProgram, assignWorkoutToProgram, removeWorkoutFromProgram,
   getTrainerPrograms, confirmPayment, calcOverdueMonths, getAthleteEvolution,
-  trialDaysLeft, createCheckoutSession, getPaymentLogs,
+  trialDaysLeft, createCheckoutSession, getPaymentLogs, updateAthleteProfile,
 } from '@/lib/api'
 import type { AthleteEvolution } from '@/lib/api'
 import type { PaymentLog } from '@/types'
@@ -71,6 +71,9 @@ export default function DashboardPage() {
   const [sendingAccess, setSendingAccess] = useState<string | null>(null)
   const [accessSent, setAccessSent] = useState<string | null>(null)
   const [accessSentLabel, setAccessSentLabel] = useState<'enviado' | 'copiado'>('enviado')
+  const [editingContact, setEditingContact] = useState<'email' | 'phone' | null>(null)
+  const [contactDraft, setContactDraft] = useState('')
+  const [savingContact, setSavingContact] = useState(false)
 
   // Athlete detail
   const [selectedAthleteForDetail, setSelectedAthleteForDetail] = useState<Athlete | null>(null)
@@ -250,6 +253,8 @@ export default function DashboardPage() {
     setEvolutionData(null)
     setSelectedExerciseName('')
     setPaymentLogs([])
+    setEditingContact(null)
+    setContactDraft('')
     setView('athlete-detail')
     setLoadingAthleteDetail(true)
     setLoadingEvolution(true)
@@ -366,6 +371,20 @@ export default function DashboardPage() {
     } finally {
       setSendingAccess(null)
     }
+  }
+
+  async function handleSaveContact(athlete: Athlete, field: 'email' | 'phone') {
+    if (!contactDraft.trim()) return
+    setSavingContact(true)
+    const ok = await updateAthleteProfile(athlete.id, { [field]: contactDraft.trim() })
+    if (ok) {
+      const updated = { ...athlete, [field]: contactDraft.trim() }
+      setAthletes((p) => p.map((a) => a.id === athlete.id ? updated : a))
+      setSelectedAthleteForDetail(updated)
+      setEditingContact(null)
+      setContactDraft('')
+    }
+    setSavingContact(false)
   }
 
   async function handleAssignWorkout() {
@@ -1920,24 +1939,110 @@ export default function DashboardPage() {
         <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
           Reenviar acesso:
         </span>
-        <button
-          onClick={() => handleSendAthleteAccess(selectedAthleteForDetail, 'email')}
-          disabled={!selectedAthleteForDetail.email || !!sendingAccess}
-          style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: selectedAthleteForDetail.email ? 'pointer' : 'not-allowed', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: selectedAthleteForDetail.email ? 'var(--fg-1)' : 'var(--fg-4)', opacity: sendingAccess ? 0.6 : 1 }}>
-          E-mail
-        </button>
-        <button
-          onClick={() => handleSendAthleteAccess(selectedAthleteForDetail, 'whatsapp')}
-          disabled={!selectedAthleteForDetail.phone || !!sendingAccess}
-          style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: selectedAthleteForDetail.phone ? 'pointer' : 'not-allowed', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: selectedAthleteForDetail.phone ? 'var(--fg-1)' : 'var(--fg-4)', opacity: sendingAccess ? 0.6 : 1 }}>
-          WhatsApp
-        </button>
-        <button
-          onClick={() => handleSendAthleteAccess(selectedAthleteForDetail, 'copy')}
-          disabled={!!sendingAccess}
-          style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: 'pointer', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: 'var(--fg-1)', opacity: sendingAccess ? 0.6 : 1 }}>
-          Copiar link
-        </button>
+
+        {/* E-mail */}
+        {editingContact === 'email' ? (
+          <>
+            <input
+              autoFocus
+              type="email"
+              value={contactDraft}
+              onChange={(e) => setContactDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveContact(selectedAthleteForDetail, 'email') }}
+              placeholder="e-mail do aluno"
+              style={{ height: 30, padding: '0 10px', borderRadius: 8, fontSize: 12, background: 'var(--ink-3)', border: '1px solid var(--accent)', color: 'var(--fg-1)', outline: 'none', width: 180 }}
+            />
+            <button
+              onClick={() => handleSaveContact(selectedAthleteForDetail, 'email')}
+              disabled={savingContact || !contactDraft.trim()}
+              style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: 'pointer', background: 'var(--accent)', border: 'none', color: '#0A0909', fontWeight: 600, opacity: (savingContact || !contactDraft.trim()) ? 0.5 : 1 }}
+            >
+              {savingContact ? '...' : 'Salvar'}
+            </button>
+            <button
+              onClick={() => { setEditingContact(null); setContactDraft('') }}
+              style={{ height: 30, padding: '0 8px', borderRadius: 999, fontSize: 14, cursor: 'pointer', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => handleSendAthleteAccess(selectedAthleteForDetail, 'email')}
+              disabled={!selectedAthleteForDetail.email || !!sendingAccess}
+              style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: selectedAthleteForDetail.email ? 'pointer' : 'not-allowed', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: selectedAthleteForDetail.email ? 'var(--fg-1)' : 'var(--fg-4)', opacity: sendingAccess ? 0.6 : 1 }}
+            >
+              E-mail
+            </button>
+            {!selectedAthleteForDetail.email && editingContact !== 'phone' && (
+              <button
+                onClick={() => { setEditingContact('email'); setContactDraft('') }}
+                style={{ height: 24, padding: '0 8px', borderRadius: 999, fontSize: 11, cursor: 'pointer', background: 'transparent', border: '1px dashed var(--ink-5)', color: 'var(--fg-3)' }}
+              >
+                + adicionar e-mail
+              </button>
+            )}
+          </>
+        )}
+
+        {/* WhatsApp */}
+        {editingContact === 'phone' ? (
+          <>
+            <input
+              autoFocus
+              type="tel"
+              value={contactDraft}
+              onChange={(e) => setContactDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveContact(selectedAthleteForDetail, 'phone') }}
+              placeholder="ex: 11999998888"
+              style={{ height: 30, padding: '0 10px', borderRadius: 8, fontSize: 12, background: 'var(--ink-3)', border: '1px solid var(--accent)', color: 'var(--fg-1)', outline: 'none', width: 170 }}
+            />
+            <button
+              onClick={() => handleSaveContact(selectedAthleteForDetail, 'phone')}
+              disabled={savingContact || !contactDraft.trim()}
+              style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: 'pointer', background: 'var(--accent)', border: 'none', color: '#0A0909', fontWeight: 600, opacity: (savingContact || !contactDraft.trim()) ? 0.5 : 1 }}
+            >
+              {savingContact ? '...' : 'Salvar'}
+            </button>
+            <button
+              onClick={() => { setEditingContact(null); setContactDraft('') }}
+              style={{ height: 30, padding: '0 8px', borderRadius: 999, fontSize: 14, cursor: 'pointer', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => handleSendAthleteAccess(selectedAthleteForDetail, 'whatsapp')}
+              disabled={!selectedAthleteForDetail.phone || !!sendingAccess}
+              style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: selectedAthleteForDetail.phone ? 'pointer' : 'not-allowed', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: selectedAthleteForDetail.phone ? 'var(--fg-1)' : 'var(--fg-4)', opacity: sendingAccess ? 0.6 : 1 }}
+            >
+              WhatsApp
+            </button>
+            {!selectedAthleteForDetail.phone && editingContact !== 'email' && (
+              <button
+                onClick={() => { setEditingContact('phone'); setContactDraft('') }}
+                style={{ height: 24, padding: '0 8px', borderRadius: 999, fontSize: 11, cursor: 'pointer', background: 'transparent', border: '1px dashed var(--ink-5)', color: 'var(--fg-3)' }}
+              >
+                + adicionar tel.
+              </button>
+            )}
+          </>
+        )}
+
+        {/* Copiar link */}
+        {editingContact === null && (
+          <button
+            onClick={() => handleSendAthleteAccess(selectedAthleteForDetail, 'copy')}
+            disabled={!!sendingAccess}
+            style={{ height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, cursor: 'pointer', background: 'var(--ink-3)', border: '1px solid var(--ink-4)', color: 'var(--fg-1)', opacity: sendingAccess ? 0.6 : 1 }}
+          >
+            Copiar link
+          </button>
+        )}
+
         {accessSent === selectedAthleteForDetail.id && (
           <span style={{ fontSize: 12, color: 'var(--accent)' }}>
             {accessSentLabel === 'copiado' ? '✓ Link copiado!' : '✓ Enviado!'}
