@@ -68,6 +68,8 @@ export default function DashboardPage() {
   const [athleteSearch, setAthleteSearch] = useState('')
   const [justCreated, setJustCreated] = useState<{ athlete: Athlete; invite: Invite } | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [sendingAccess, setSendingAccess] = useState<string | null>(null)
+  const [accessSent, setAccessSent] = useState<string | null>(null)
 
   // Athlete detail
   const [selectedAthleteForDetail, setSelectedAthleteForDetail] = useState<Athlete | null>(null)
@@ -338,6 +340,30 @@ export default function DashboardPage() {
       `Olá, ${athlete.name}! ${trainer?.name ?? 'Seu personal trainer'} te convidou para usar o Kinevia para acompanhar seus treinos. Clique para ativar seu acesso: ${inviteLink}`,
     )
     window.open(`https://wa.me/${athlete.phone.replace(/\D/g, '')}?text=${msg}`, '_blank')
+  }
+
+  async function handleSendAthleteAccess(athlete: Athlete) {
+    if (!trainer || !athlete.invite_token) return
+    setSendingAccess(athlete.id)
+    const inviteLink = `${window.location.origin}/convite/${athlete.invite_token}`
+    try {
+      if (athlete.email) {
+        await supabase.functions.invoke('send-invite', {
+          body: { athlete_name: athlete.name, athlete_email: athlete.email, trainer_name: trainer.name, invite_link: inviteLink },
+        })
+      } else if (athlete.phone) {
+        const msg = encodeURIComponent(
+          `Olá, ${athlete.name}! ${trainer.name ?? 'Seu personal'} te enviou um novo link de acesso ao Kinevia: ${inviteLink}`,
+        )
+        window.open(`https://wa.me/${athlete.phone.replace(/\D/g, '')}?text=${msg}`, '_blank')
+      } else {
+        await navigator.clipboard.writeText(inviteLink)
+      }
+      setAccessSent(athlete.id)
+      setTimeout(() => setAccessSent(null), 3000)
+    } finally {
+      setSendingAccess(null)
+    }
   }
 
   async function handleAssignWorkout() {
@@ -1881,10 +1907,25 @@ export default function DashboardPage() {
             <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4, fontStyle: 'italic' }}>{selectedAthleteForDetail.objective}</div>
           )}
         </div>
-        <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
-          style={{ marginLeft: 'auto', height: 38, padding: '0 16px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {KVIcon.mic(14, 'var(--accent-ink)')} Novo treino
-        </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={() => handleSendAthleteAccess(selectedAthleteForDetail)}
+            disabled={sendingAccess === selectedAthleteForDetail.id}
+            title={selectedAthleteForDetail.email ? 'Enviar link de acesso por e-mail' : selectedAthleteForDetail.phone ? 'Enviar link de acesso via WhatsApp' : 'Copiar link de acesso'}
+            style={{ height: 38, padding: '0 14px', borderRadius: 999, background: accessSent === selectedAthleteForDetail.id ? 'color-mix(in oklch, var(--accent), black 60%)' : 'transparent', border: '1px solid var(--ink-4)', color: accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-2)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: sendingAccess === selectedAthleteForDetail.id ? 0.6 : 1 }}>
+            {accessSent === selectedAthleteForDetail.id ? (
+              <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>{isMobile ? '' : 'Enviado!'}</>
+            ) : sendingAccess === selectedAthleteForDetail.id ? (
+              'Enviando...'
+            ) : (
+              <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>{isMobile ? '' : 'Reenviar acesso'}</>
+            )}
+          </button>
+          <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
+            style={{ height: 38, padding: '0 16px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {KVIcon.mic(14, 'var(--accent-ink)')} {isMobile ? '' : 'Novo treino'}
+          </button>
+        </div>
       </div>
 
       {loadingAthleteDetail ? (
