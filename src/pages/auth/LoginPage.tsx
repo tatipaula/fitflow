@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { KVLogo, KVButton } from '@/components/ui'
 import { PWAInstallBanner } from '@/components/ui/PWAInstallBanner'
 
-type Mode = 'login' | 'signup'
+type Mode = 'login' | 'signup' | 'recovery'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -22,6 +22,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [emailSent, setEmailSent] = useState(false)
+  const [emailSentMode, setEmailSentMode] = useState<'signup' | 'recovery'>('signup')
   const [submitting, setSubmitting] = useState(false)
 
   function friendlyError(message: string): string {
@@ -57,7 +58,24 @@ export default function LoginPage() {
       })
       if (error) { setError(friendlyError(error.message)); return }
       sendWelcomeEmail(name, email)
-      if (!data.session) setEmailSent(true)
+      if (!data.session) { setEmailSentMode('signup'); setEmailSent(true) }
+    } catch {
+      setError('Verifique sua conexão e tente novamente.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleRecovery(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      if (error) setError('Não foi possível enviar o link. Verifique o email e tente novamente.')
+      else { setEmailSentMode('recovery'); setEmailSent(true) }
     } catch {
       setError('Verifique sua conexão e tente novamente.')
     } finally {
@@ -87,7 +105,10 @@ export default function LoginPage() {
           </div>
           <div className="display" style={{ fontSize: 28, marginBottom: 12 }}>Verifique seu email</div>
           <p style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.6 }}>
-            Enviamos um link de confirmação para <strong style={{ color: 'var(--fg-1)' }}>{email}</strong>. Clique no link para ativar sua conta.
+            {emailSentMode === 'signup'
+              ? <>Enviamos um link de confirmação para <strong style={{ color: 'var(--fg-1)' }}>{email}</strong>. Clique no link para ativar sua conta.</>
+              : <>Enviamos um link para redefinir sua senha para <strong style={{ color: 'var(--fg-1)' }}>{email}</strong>. Verifique sua caixa de entrada.</>
+            }
           </p>
           <button
             onClick={() => { setEmailSent(false); setMode('login') }}
@@ -99,6 +120,19 @@ export default function LoginPage() {
       </div>
     )
   }
+
+  const cardTitle = mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Criar conta' : 'Redefinir senha'
+  const cardSubtitle = mode === 'login'
+    ? 'Entre com seu email e senha.'
+    : mode === 'signup'
+      ? 'Comece a usar o Kinevia.'
+      : 'Enviaremos um link para redefinir sua senha.'
+
+  const submitLabel = submitting
+    ? (mode === 'login' ? 'Entrando...' : mode === 'signup' ? 'Criando conta...' : 'Enviando...')
+    : (mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Criar conta' : 'Enviar link')
+
+  const handleSubmit = mode === 'login' ? handleLogin : mode === 'signup' ? handleSignup : handleRecovery
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -114,34 +148,32 @@ export default function LoginPage() {
           {/* hairline */}
           <div style={{ position: 'absolute', top: 0, left: 40, right: 40, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
 
-          <div className="display" style={{ fontSize: 30, marginBottom: 6 }}>
-            {mode === 'login' ? 'Entrar' : 'Criar conta'}
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--fg-3)', marginBottom: 28 }}>
-            {mode === 'login' ? 'Entre com seu email e senha.' : 'Comece a usar o Kinevia.'}
-          </p>
+          <div className="display" style={{ fontSize: 30, marginBottom: 6 }}>{cardTitle}</div>
+          <p style={{ fontSize: 13, color: 'var(--fg-3)', marginBottom: 28 }}>{cardSubtitle}</p>
 
-          {/* Mode toggle */}
-          <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--ink-1)', borderRadius: 999, marginBottom: 24 }}>
-            {(['login', 'signup'] as Mode[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => { setMode(m); setError(null) }}
-                style={{
-                  flex: 1, height: 32, borderRadius: 999, fontSize: 12, fontWeight: 500, letterSpacing: 0.02,
-                  background: mode === m ? 'var(--ink-3)' : 'transparent',
-                  color: mode === m ? 'var(--fg-1)' : 'var(--fg-3)',
-                  border: mode === m ? '1px solid var(--ink-4)' : '1px solid transparent',
-                  cursor: 'pointer',
-                }}
-              >
-                {m === 'login' ? 'Entrar' : 'Criar conta'}
-              </button>
-            ))}
-          </div>
+          {/* Mode toggle — only for login/signup */}
+          {mode !== 'recovery' && (
+            <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--ink-1)', borderRadius: 999, marginBottom: 24 }}>
+              {(['login', 'signup'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { setMode(m); setError(null) }}
+                  style={{
+                    flex: 1, height: 32, borderRadius: 999, fontSize: 12, fontWeight: 500, letterSpacing: 0.02,
+                    background: mode === m ? 'var(--ink-3)' : 'transparent',
+                    color: mode === m ? 'var(--fg-1)' : 'var(--fg-3)',
+                    border: mode === m ? '1px solid var(--ink-4)' : '1px solid transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {m === 'login' ? 'Entrar' : 'Criar conta'}
+                </button>
+              ))}
+            </div>
+          )}
 
-          <form onSubmit={mode === 'login' ? handleLogin : handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {mode === 'signup' && (
               <div>
                 <label style={labelStyle}>Nome</label>
@@ -152,10 +184,23 @@ export default function LoginPage() {
               <label style={labelStyle}>Email</label>
               <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" style={inputStyle}/>
             </div>
-            <div>
-              <label style={labelStyle}>Senha</label>
-              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={inputStyle}/>
-            </div>
+            {mode !== 'recovery' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>Senha</label>
+                  {mode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={() => { setMode('recovery'); setError(null) }}
+                      style={{ fontSize: 11, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                    >
+                      Esqueceu a senha?
+                    </button>
+                  )}
+                </div>
+                <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={inputStyle}/>
+              </div>
+            )}
 
             {error && (
               <div style={{ padding: '10px 14px', background: 'color-mix(in oklch, var(--danger), black 70%)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--danger)' }}>
@@ -164,10 +209,18 @@ export default function LoginPage() {
             )}
 
             <KVButton type="submit" variant="primary" size="lg" disabled={submitting} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
-              {submitting
-                ? (mode === 'login' ? 'Entrando...' : 'Criando conta...')
-                : (mode === 'login' ? 'Entrar' : 'Criar conta')}
+              {submitLabel}
             </KVButton>
+
+            {mode === 'recovery' && (
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setError(null) }}
+                style={{ fontSize: 12, color: 'var(--fg-3)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0, alignSelf: 'center' }}
+              >
+                Voltar para o login
+              </button>
+            )}
           </form>
         </div>
       </div>

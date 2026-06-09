@@ -6,6 +6,7 @@ import { linkAthleteAccount, linkAthleteByInviteToken, saveParqResponse, updateA
 import { registerPush } from '@/lib/push'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import LoginPage from '@/pages/auth/LoginPage'
+import ResetPasswordPage from '@/pages/auth/ResetPasswordPage'
 import InvitePage from '@/pages/invite/InvitePage'
 import ConvitePage from '@/pages/invite/ConvitePage'
 import DashboardPage from '@/pages/trainer/DashboardPage'
@@ -117,6 +118,7 @@ export default function App() {
         <Route path="/trial" element={<TrialPage />} />
         <Route path="/trial/stats" element={<TrialStatsPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/invite/:token" element={<InvitePage />} />
         <Route path="/convite/:token" element={<ConvitePage />} />
         <Route
