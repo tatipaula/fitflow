@@ -1911,19 +1911,14 @@ export default function DashboardPage() {
           <button
             onClick={() => handleSendAthleteAccess(selectedAthleteForDetail)}
             disabled={sendingAccess === selectedAthleteForDetail.id}
-            title={selectedAthleteForDetail.email ? 'Enviar link de acesso por e-mail' : selectedAthleteForDetail.phone ? 'Enviar link de acesso via WhatsApp' : 'Copiar link de acesso'}
-            style={{ height: 38, padding: '0 14px', borderRadius: 999, background: accessSent === selectedAthleteForDetail.id ? 'color-mix(in oklch, var(--accent), black 60%)' : 'transparent', border: '1px solid var(--ink-4)', color: accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-2)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: sendingAccess === selectedAthleteForDetail.id ? 0.6 : 1 }}>
-            {accessSent === selectedAthleteForDetail.id ? (
-              <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>{isMobile ? '' : 'Enviado!'}</>
-            ) : sendingAccess === selectedAthleteForDetail.id ? (
-              'Enviando...'
-            ) : (
-              <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>{isMobile ? '' : 'Reenviar acesso'}</>
-            )}
+            style={{ height: 38, padding: '0 16px', borderRadius: 999, background: accessSent === selectedAthleteForDetail.id ? 'color-mix(in oklch, var(--accent), black 60%)' : 'var(--ink-3)', border: `1px solid ${accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-3)'}`, color: accessSent === selectedAthleteForDetail.id ? 'var(--accent)' : 'var(--fg-1)', fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', opacity: sendingAccess === selectedAthleteForDetail.id ? 0.6 : 1 }}>
+            {accessSent === selectedAthleteForDetail.id ? '✓ Enviado!'
+              : sendingAccess === selectedAthleteForDetail.id ? 'Enviando...'
+              : 'Reenviar acesso'}
           </button>
           <button onClick={() => { setSelectedAthleteId(selectedAthleteForDetail.id); setView('recording') }}
-            style={{ height: 38, padding: '0 16px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {KVIcon.mic(14, 'var(--accent-ink)')} {isMobile ? '' : 'Novo treino'}
+            style={{ height: 38, padding: '0 16px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+            {KVIcon.mic(14, 'var(--accent-ink)')} Novo treino
           </button>
         </div>
       </div>
