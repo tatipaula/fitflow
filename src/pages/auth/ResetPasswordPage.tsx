@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { KVLogo, KVButton } from '@/components/ui'
+
+// Capturado no import do módulo: o supabase-js pode limpar o hash antes do mount
+const initialHash = typeof window !== 'undefined' ? window.location.hash : ''
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate()
@@ -10,6 +14,23 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+  // null = verificando | true = sessão de recovery válida | false = link inválido/expirado
+  const [sessionReady, setSessionReady] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    // Link expirado/já usado: Supabase redireciona com #error=... no hash
+    if (initialHash.includes('error=') || window.location.hash.includes('error=')) { setSessionReady(false); return }
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) setSessionReady(true)
+    })
+    // O hash com tokens pode ainda estar sendo processado pelo supabase-js no mount
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) setSessionReady(true)
+    })
+    const timeout = setTimeout(() => setSessionReady((p) => (p === null ? false : p)), 4000)
+    return () => { subscription.unsubscribe(); clearTimeout(timeout) }
+  }, [])
 
   const inputStyle: React.CSSProperties = {
     width: '100%', height: 42, padding: '0 14px',
@@ -32,7 +53,13 @@ export default function ResetPasswordPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password })
       if (error) {
-        setError('Link inválido ou expirado. Solicite um novo link de recuperação.')
+        if (error.message.includes('should be different')) {
+          setError('A nova senha precisa ser diferente da senha atual.')
+        } else if (error.message.includes('Password should be')) {
+          setError('A senha deve ter pelo menos 6 caracteres.')
+        } else {
+          setError('Link inválido ou expirado. Solicite um novo link de recuperação.')
+        }
       } else {
         setDone(true)
         setTimeout(async () => {
@@ -45,6 +72,33 @@ export default function ResetPasswordPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (sessionReady === null) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <LoadingSpinner size="lg"/>
+      </div>
+    )
+  }
+
+  if (sessionReady === false) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--ink-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 360, padding: '0 24px', textAlign: 'center' }}>
+          <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'center' }}>
+            <KVLogo size={36} color="var(--fg-3)"/>
+          </div>
+          <div className="display" style={{ fontSize: 26, marginBottom: 12 }}>Link inválido ou expirado</div>
+          <p style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.6, marginBottom: 24 }}>
+            Este link de redefinição não é mais válido. Links expiram em 1 hora ou após serem usados.
+          </p>
+          <KVButton variant="primary" size="lg" onClick={() => navigate('/login')} style={{ justifyContent: 'center' }}>
+            Solicitar novo link
+          </KVButton>
+        </div>
+      </div>
+    )
   }
 
   if (done) {

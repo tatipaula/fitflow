@@ -58,12 +58,44 @@ export default function ConvitePage() {
     })
   }, [token])
 
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false)
+  const [mode, setMode] = useState<'signup' | 'login'>('signup')
+
   function friendlyError(message: string): string {
     if (message.includes('Invalid login credentials')) return 'Email ou senha incorretos.'
-    if (message.includes('User already registered')) return 'Este email já tem uma conta. Use a opção Entrar.'
+    if (message.includes('User already registered')) {
+      setAlreadyRegistered(true)
+      return 'Este email já tem uma conta.'
+    }
     if (message.includes('Email not confirmed')) return 'Confirme seu email antes de entrar.'
     if (message.includes('Password should be')) return 'A senha deve ter pelo menos 6 caracteres.'
     return 'Algo deu errado. Tente novamente.'
+  }
+
+  // Aluno que já tem conta: entra e vincula pelo token na mesma tela.
+  // Cobre também contas órfãs (criadas mas nunca vinculadas a athletes.auth_user_id).
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    if (!token) return
+    setError(null); setSubmitting(true)
+    try {
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInErr) { setError(friendlyError(signInErr.message)); return }
+      const linked = await linkAthleteByInviteToken(token)
+      // initAuth do onAuthStateChange pode ter rodado ANTES do link acima — re-resolve o role
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) await useAuthStore.getState().initAuth(session.user.id)
+      // Se o convite era inválido E a conta não estava vinculada antes, o usuário ficaria em limbo
+      if (!linked && useAuthStore.getState().role === null) {
+        await supabase.auth.signOut()
+        setError('Este convite não é mais válido e sua conta ainda não está ativada. Peça um novo link ao seu personal.')
+      }
+      // navegação acontece via useEffect quando o role for resolvido
+    } catch {
+      setError('Verifique sua conexão e tente novamente.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -86,7 +118,13 @@ export default function ConvitePage() {
       }
 
       if (data.session) {
-        await linkAthleteByInviteToken(token)
+        const linked = await linkAthleteByInviteToken(token)
+        if (!linked) {
+          // Conta criada mas convite expirou/foi usado entre o load e o submit.
+          // Sem este guard a conta fica órfã silenciosamente (auth_user_id null).
+          setError('Sua conta foi criada, mas este convite não é mais válido. Peça um novo link ao seu personal e use a opção "Já tenho conta".')
+          return
+        }
         await saveParqResponse(athleteId, answers)
         await updateAthleteProfile(athleteId, physicalData)
       } else {
@@ -164,12 +202,14 @@ export default function ConvitePage() {
         <div style={{ background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-xl)', padding: '32px 28px', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', top: 0, left: 40, right: 40, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent), transparent)', opacity: 0.4 }}/>
 
-          {/* Step indicator */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-            {[1, 2, 3].map((s) => (
-              <div key={s} style={{ height: 3, flex: 1, borderRadius: 999, background: step >= s ? 'var(--accent)' : 'var(--ink-4)', transition: 'background 0.2s' }}/>
-            ))}
-          </div>
+          {/* Step indicator — só no fluxo de cadastro */}
+          {mode === 'signup' && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+              {[1, 2, 3].map((s) => (
+                <div key={s} style={{ height: 3, flex: 1, borderRadius: 999, background: step >= s ? 'var(--accent)' : 'var(--ink-4)', transition: 'background 0.2s' }}/>
+              ))}
+            </div>
+          )}
 
           {invite?.athletes?.name && (
             <p style={{ fontSize: 13, color: 'var(--fg-2)', marginBottom: 20, lineHeight: 1.5 }}>
@@ -177,31 +217,55 @@ export default function ConvitePage() {
             </p>
           )}
 
-          {/* Step 1: account */}
+          {/* Step 1: account (signup) ou login direto */}
           {step === 1 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div className="display" style={{ fontSize: 24, marginBottom: 4 }}>Crie sua senha</div>
+            <form onSubmit={mode === 'login' ? handleLogin : (e) => { e.preventDefault(); setStep(2) }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="display" style={{ fontSize: 24, marginBottom: 4 }}>
+                {mode === 'signup' ? 'Crie sua senha' : 'Entre com sua conta'}
+              </div>
+
+              {/* Mode toggle */}
+              <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--ink-1)', borderRadius: 999 }}>
+                {(['signup', 'login'] as const).map((m) => (
+                  <button key={m} type="button" onClick={() => { setMode(m); setError(null); setAlreadyRegistered(false) }}
+                    style={{
+                      flex: 1, height: 32, borderRadius: 999, fontSize: 12, fontWeight: 500,
+                      background: mode === m ? 'var(--ink-3)' : 'transparent',
+                      color: mode === m ? 'var(--fg-1)' : 'var(--fg-3)',
+                      border: mode === m ? '1px solid var(--ink-4)' : '1px solid transparent',
+                      cursor: 'pointer',
+                    }}>
+                    {m === 'signup' ? 'Criar senha' : 'Já tenho conta'}
+                  </button>
+                ))}
+              </div>
+
               <div>
                 <label style={lbl}>Email</label>
                 <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} style={inp}/>
               </div>
               <div>
                 <label style={lbl}>Senha</label>
-                <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" style={inp}/>
+                <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === 'signup' ? 'Mínimo 6 caracteres' : '••••••••'} style={inp}/>
               </div>
               {error && (
                 <div style={{ padding: '10px 14px', background: 'color-mix(in oklch, var(--danger), black 70%)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--danger)' }}>
                   {error}
+                  {alreadyRegistered && mode === 'signup' && (
+                    <button type="button" onClick={() => { setMode('login'); setError(null) }}
+                      style={{ display: 'block', marginTop: 8, color: 'var(--accent)', textDecoration: 'underline', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      Entrar com minha conta →
+                    </button>
+                  )}
                 </div>
               )}
               <button
-                type="button"
-                disabled={!email || password.length < 6}
-                onClick={() => setStep(2)}
-                style={{ height: 46, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (!email || password.length < 6) ? 0.5 : 1 }}>
-                Continuar
+                type="submit"
+                disabled={!email || password.length < 6 || submitting}
+                style={{ height: 46, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: (!email || password.length < 6 || submitting) ? 0.5 : 1 }}>
+                {mode === 'signup' ? 'Continuar' : (submitting ? 'Entrando...' : 'Entrar e ativar acesso')}
               </button>
-            </div>
+            </form>
           )}
 
           {/* Step 2: PAR-Q */}
@@ -305,6 +369,12 @@ export default function ConvitePage() {
               {error && (
                 <div style={{ padding: '10px 14px', background: 'color-mix(in oklch, var(--danger), black 70%)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--danger)', marginBottom: 12 }}>
                   {error}
+                  {alreadyRegistered && (
+                    <button type="button" onClick={() => { setMode('login'); setError(null); setStep(1) }}
+                      style={{ display: 'block', marginTop: 8, color: 'var(--accent)', textDecoration: 'underline', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      Entrar com minha conta →
+                    </button>
+                  )}
                 </div>
               )}
 

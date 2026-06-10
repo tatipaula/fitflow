@@ -136,6 +136,18 @@ export async function getInviteByToken(token: string): Promise<InviteWithAthlete
   return data as unknown as InviteWithAthlete
 }
 
+export async function createInviteForAthlete(athleteId: string): Promise<Invite | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+  const { data, error } = await supabase
+    .from('invites')
+    .insert({ trainer_id: session.user.id, athlete_id: athleteId })
+    .select('*')
+    .single()
+  if (error) return null
+  return data as Invite
+}
+
 export async function linkAthleteByInviteToken(token: string): Promise<boolean> {
   const { data, error } = await supabase.rpc('link_athlete_by_invite_token', { p_invite_token: token })
   if (error) return false

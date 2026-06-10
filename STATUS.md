@@ -1,10 +1,41 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-08 (sessão 27)
+## Última atualização: 2026-06-10 (sessão 28)
 
 ---
 
 ## Concluído
+
+### Sessão 28 — Fix do link de convite inválido + fluxo de recuperação de senha
+
+#### Bug raiz: dois sistemas de convite misturados
+- Diagnóstico: alunos do Marcos recebiam "link inválido" ao reenviar acesso
+- Causa: `handleSendAthleteAccess` usava `athletes.invite_token` (sistema antigo, rota `/invite/`) montando URL `/convite/` (sistema novo, tabela `invites`) — o token nunca existia na tabela consultada
+- `createInviteForAthlete` adicionada a `api.ts`: todo reenvio agora cria registro novo na tabela `invites` (token fresco, 7 dias)
+- Botão "Convite" dos cards de alunos migrado para o mesmo fluxo (antes copiava link da rota antiga)
+- Falha na geração do invite agora exibe "✗ Erro ao gerar link" (antes falhava em silêncio)
+
+#### ConvitePage — modo "Já tenho conta"
+- Toggle Criar senha / Já tenho conta no step 1
+- Login vincula a conta na mesma tela (`linkAthleteByInviteToken`) e re-resolve o role via `initAuth` — corrige race condition com o `onAuthStateChange` do App.tsx
+- Resultado do RPC de vínculo agora é verificado nos dois caminhos (cadastro e login); convite inválido mostra mensagem clara em vez de criar conta órfã silenciosamente
+- Erro "email já cadastrado" oferece atalho "Entrar com minha conta →" (steps 1 e 3)
+
+#### ResetPasswordPage — validação de sessão de recovery
+- Página agora valida a sessão no mount: hash com `#error=` (link expirado/usado) ou ausência de sessão exibe tela "Link inválido ou expirado" com botão para solicitar novo
+- Bug grave corrigido: com link expirado + outra pessoa logada no dispositivo, o submit trocava a senha de quem estava logado
+- Hash capturado no import do módulo (supabase-js pode limpá-lo antes do mount)
+- Mensagens de erro específicas (senha igual à anterior, senha curta)
+
+#### Conta órfã da Luiza Melucci — correção manual na base
+- Padrão descoberto: usuário existe no auth mas `athletes.auth_user_id` é null → login funciona, role resolve null, usuário fica em limbo
+- Luiza tinha conta desde 30/05 (cadastro via convite cuja vinculação falhou — era a confirmação de email, desativada na sessão 20)
+- Corrigida via admin API: senha redefinida + `auth_user_id` e email vinculados à linha da atleta; login testado de ponta a ponta via REST
+- Scan completo da base: Luiza era a única órfã real; Marcos Cabral (aluno) segue sem ativação mas sem email/telefone cadastrados — pendência do trainer, não do código
+- Verificado: Redirect URLs do Supabase Auth tem `https://kinevia.com.br/**` (cobre `/reset-password`)
+- 3 deploys em produção ✓
+
+---
 
 ### Sessão 27 — Meta Pixel
 
@@ -354,6 +385,7 @@
 
 ## Backlog
 
+- **Remover sistema de convite antigo**: rota `/invite/:token`, `InvitePage.tsx`, campo `athletes.invite_token` e helpers associados (`getAthleteByInviteToken`, `linkAthleteAccount`, `pending_invite_token` no App.tsx). Ninguém mais gera esses links desde a sessão 28; é código morto que causou o bug do link inválido por confusão entre os dois sistemas
 - **Integração Meta Ads no /trial/stats**: trazer custo por campanha, CPM, cliques e CTR via Meta Marketing API. Implementar como Supabase Edge Function (token seguro no servidor). Pré-requisitos: Ad Account ID (`act_XXXXXXXXX`) e System User token com permissão `ads_read`. Aguardando agência finalizar configuração das campanhas.
 - Integração WhatsApp para notificações de cobrança
 - Auto-completar programa via trigger já implementado — validar em produção com dados reais

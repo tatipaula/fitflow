@@ -14,7 +14,7 @@ import {
   getAthleteRankingStats, getBadgesByTrainer, createBadge, deleteBadge,
   getProgramsByAthlete, createProgram, assignWorkoutToProgram, removeWorkoutFromProgram,
   getTrainerPrograms, confirmPayment, calcOverdueMonths, getAthleteEvolution,
-  trialDaysLeft, createCheckoutSession, getPaymentLogs, updateAthleteProfile,
+  trialDaysLeft, createCheckoutSession, getPaymentLogs, updateAthleteProfile, createInviteForAthlete,
 } from '@/lib/api'
 import type { AthleteEvolution } from '@/lib/api'
 import type { PaymentLog } from '@/types'
@@ -70,7 +70,7 @@ export default function DashboardPage() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [sendingAccess, setSendingAccess] = useState<string | null>(null)
   const [accessSent, setAccessSent] = useState<string | null>(null)
-  const [accessSentLabel, setAccessSentLabel] = useState<'enviado' | 'copiado'>('enviado')
+  const [accessSentLabel, setAccessSentLabel] = useState<'enviado' | 'copiado' | 'erro ao gerar link'>('enviado')
   const [editingContact, setEditingContact] = useState<'email' | 'phone' | null>(null)
   const [contactDraft, setContactDraft] = useState('')
   const [savingContact, setSavingContact] = useState(false)
@@ -349,10 +349,17 @@ export default function DashboardPage() {
   }
 
   async function handleSendAthleteAccess(athlete: Athlete, channel: 'email' | 'whatsapp' | 'copy') {
-    if (!trainer || !athlete.invite_token) return
+    if (!trainer) return
     setSendingAccess(athlete.id)
-    const inviteLink = `${window.location.origin}/convite/${athlete.invite_token}`
     try {
+      const freshInvite = await createInviteForAthlete(athlete.id)
+      if (!freshInvite) {
+        setAccessSentLabel('erro ao gerar link')
+        setAccessSent(athlete.id)
+        setTimeout(() => setAccessSent(null), 3000)
+        return
+      }
+      const inviteLink = `${window.location.origin}/convite/${freshInvite.token}`
       if (channel === 'email' && athlete.email) {
         await supabase.functions.invoke('send-invite', {
           body: { athlete_name: athlete.name, athlete_email: athlete.email, trainer_name: trainer.name, invite_link: inviteLink },
@@ -566,7 +573,6 @@ export default function DashboardPage() {
     setWorkoutText((p) => p.trim() ? `${p.trim()}\n${line}` : line)
   }
 
-  function copyInviteLink(a: Athlete) { navigator.clipboard.writeText(`${window.location.origin}/invite/${a.invite_token}`) }
   function copyConviteLink(token: string) { navigator.clipboard.writeText(`${window.location.origin}/convite/${token}`) }
 
   async function handleCheckIn(athleteId: string) {
@@ -1249,9 +1255,10 @@ export default function DashboardPage() {
                           style={{ flex: 1, height: 36, borderRadius: 999, background: checkInSuccess === a.id ? 'var(--success)' : 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: checkingInId === a.id ? 0.6 : 1, transition: 'background 0.3s' }}>
                           {checkingInId === a.id ? '...' : checkInSuccess === a.id ? '✓ Registrado!' : '✓ Check-in'}
                         </button>
-                        <button onClick={() => copyInviteLink(a)}
-                          style={{ height: 36, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer' }}>
-                          Convite
+                        <button onClick={() => handleSendAthleteAccess(a, 'copy')}
+                          disabled={!!sendingAccess}
+                          style={{ height: 36, padding: '0 12px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: accessSent === a.id ? 'var(--accent)' : 'var(--fg-3)', fontSize: 12, cursor: 'pointer', opacity: sendingAccess ? 0.6 : 1 }}>
+                          {accessSent === a.id ? accessSentLabel : 'Convite'}
                         </button>
                       </div>
                     </>
@@ -2045,7 +2052,7 @@ export default function DashboardPage() {
 
         {accessSent === selectedAthleteForDetail.id && (
           <span style={{ fontSize: 12, color: 'var(--accent)' }}>
-            {accessSentLabel === 'copiado' ? '✓ Link copiado!' : '✓ Enviado!'}
+            {accessSentLabel === 'copiado' ? '✓ Link copiado!' : accessSentLabel === 'erro ao gerar link' ? '✗ Erro ao gerar link' : '✓ Enviado!'}
           </span>
         )}
         {sendingAccess === selectedAthleteForDetail.id && (
