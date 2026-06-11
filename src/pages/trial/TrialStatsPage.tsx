@@ -45,6 +45,24 @@ function pct(part: number, total: number): string {
   return (part / total * 100).toFixed(0) + '%'
 }
 
+const fmtBRL = (n: number): string =>
+  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+const inputStyle: React.CSSProperties = {
+  padding: '9px 12px',
+  fontFamily: "'DM Sans', sans-serif", fontSize: 14,
+  background: 'var(--paper-2)', color: 'var(--ink-2)',
+  border: '1px solid rgba(28,26,23,0.2)', borderRadius: 8,
+  outline: 'none', boxSizing: 'border-box',
+}
+
+const btnStyle: React.CSSProperties = {
+  padding: '10px 18px',
+  fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 500,
+  background: 'var(--ink-2)', color: 'var(--fg-1)',
+  border: 'none', borderRadius: 8, cursor: 'pointer',
+}
+
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
@@ -57,6 +75,25 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
       </div>
       {sub && (
         <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: T.stone, fontWeight: 300, marginTop: 6 }}>
+          {sub}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Mini stat (custo) ──────────────────────────────────────────────────────────
+function MiniStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div style={{ background: T.pap2, borderRadius: 10, padding: '16px 18px', border: '1px solid rgba(28,26,23,0.08)' }}>
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.stone, marginBottom: 8 }}>
+        {label}
+      </div>
+      <div style={{ fontFamily: "'Cormorant', serif", fontWeight: 300, fontSize: 28, color: T.ink, lineHeight: 1 }}>
+        {value}
+      </div>
+      {sub && (
+        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: T.stone, fontWeight: 300, marginTop: 5 }}>
           {sub}
         </div>
       )}
@@ -144,6 +181,14 @@ export default function TrialStatsPage() {
   const [days, setDays]       = useState(14)
   const [error, setError]     = useState<string | null>(null)
 
+  // Investimento em anúncios (entrada manual)
+  const [spend, setSpend]             = useState<{ spend_date: string; amount_brl: number }[]>([])
+  const [activation, setActivation]   = useState<{ new_trainers: number; activated_trainers: number; athletes_total: number } | null>(null)
+  const [reloadKey, setReloadKey]     = useState(0)
+  const [formDate, setFormDate]       = useState(() => new Date().toISOString().slice(0, 10))
+  const [formAmount, setFormAmount]   = useState('')
+  const [saving, setSaving]           = useState(false)
+
   function handleAuth() {
     sessionStorage.setItem('stats_ok', '1')
     setAuthed(true)
@@ -152,18 +197,44 @@ export default function TrialStatsPage() {
   useEffect(() => {
     if (!authed) return
     setLoading(true)
-    const since = new Date(Date.now() - days * 86_400_000).toISOString()
-    supabase
-      .from('page_events')
-      .select('id, session_id, event, data, page, referrer, created_at')
-      .gte('created_at', since)
-      .order('created_at', { ascending: false })
-      .then(({ data, error: err }) => {
-        if (err) { setError(err.message); setLoading(false); return }
-        setEvents((data as PageEvent[]) ?? [])
-        setLoading(false)
-      })
-  }, [days, authed])
+    const sinceDate = new Date(Date.now() - days * 86_400_000)
+    const since    = sinceDate.toISOString()
+    const sinceDay = since.slice(0, 10)
+
+    Promise.all([
+      supabase
+        .from('page_events')
+        .select('id, session_id, event, data, page, referrer, created_at')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('ad_spend')
+        .select('spend_date, amount_brl')
+        .gte('spend_date', sinceDay)
+        .order('spend_date', { ascending: false }),
+      supabase.rpc('validation_activation', { p_days: days }),
+    ]).then(([ev, sp, act]) => {
+      if (ev.error) { setError(ev.error.message); setLoading(false); return }
+      setEvents((ev.data as PageEvent[]) ?? [])
+      setSpend((sp.data as { spend_date: string; amount_brl: number }[]) ?? [])
+      setActivation((Array.isArray(act.data) ? act.data[0] : act.data) ?? null)
+      setLoading(false)
+    })
+  }, [days, authed, reloadKey])
+
+  async function saveSpend(e: React.FormEvent) {
+    e.preventDefault()
+    const amt = parseFloat(formAmount.replace(',', '.'))
+    if (isNaN(amt) || amt < 0) return
+    setSaving(true)
+    const { error: err } = await supabase
+      .from('ad_spend')
+      .upsert({ spend_date: formDate, amount_brl: amt }, { onConflict: 'spend_date' })
+    setSaving(false)
+    if (err) { setError(err.message); return }
+    setFormAmount('')
+    setReloadKey(k => k + 1)
+  }
 
   if (!authed) return <PasswordGate onAuth={handleAuth} />
 
@@ -213,6 +284,19 @@ export default function TrialStatsPage() {
   const avgTime = timeEvents.length > 0
     ? Math.round(timeEvents.reduce((s, e) => s + Number(e.data.time_on_page_seconds), 0) / timeEvents.length)
     : null
+
+  // ── Ativação (trainers que cadastraram aluno) ─────────────────────────────────
+  const newTrainers       = activation?.new_trainers ?? null
+  const activatedTrainers = activation?.activated_trainers ?? null
+  const activationRate    = newTrainers && newTrainers > 0 && activatedTrainers != null
+    ? Math.round(activatedTrainers / newTrainers * 100) : null
+
+  // ── Custos (gasto manual × funil) ─────────────────────────────────────────────
+  const totalSpend       = spend.reduce((s, r) => s + Number(r.amount_brl), 0)
+  const costPerSession   = total > 0          ? totalSpend / total          : null
+  const costPerLead      = ctaSessionCount > 0 ? totalSpend / ctaSessionCount : null
+  const costPerSignup    = newTrainers && newTrainers > 0       ? totalSpend / newTrainers       : null
+  const costPerActivated = activatedTrainers && activatedTrainers > 0 ? totalSpend / activatedTrainers : null
 
   return (
     <div style={{ minHeight: '100vh', background: T.pap2, padding: 'clamp(32px, 5vh, 64px) clamp(16px, 5vw, 48px)' }}>
@@ -267,6 +351,63 @@ export default function TrialStatsPage() {
             <StatCard label="Taxa de conversão"  value={pct(ctaSessionCount, total)} sub={`${ctaSessionCount} sessões clicaram`} />
             {avgTime !== null && (
               <StatCard label="Tempo médio na página" value={avgTime < 60 ? `${avgTime}s` : `${Math.round(avgTime / 60)}min ${avgTime % 60}s`} />
+            )}
+            {newTrainers !== null && (
+              <StatCard
+                label="Trainers ativados"
+                value={`${activatedTrainers ?? 0}/${newTrainers}`}
+                sub={`${activationRate != null ? activationRate + '% ativação · ' : ''}${activation?.athletes_total ?? 0} alunos cadastrados`}
+              />
+            )}
+          </div>
+
+          {/* ── Investimento em anúncios ── */}
+          <div style={{ background: T.paper, borderRadius: 12, padding: '28px', border: '1px solid rgba(28,26,23,0.1)', marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.stone }}>
+                Investimento em anúncios — Meta Ads
+              </div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: T.stone, fontWeight: 300 }}>
+                Gasto digitado manualmente · janela de {days}d
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 24 }}>
+              <MiniStat label="Gasto total"        value={totalSpend > 0 ? fmtBRL(totalSpend) : '—'} sub={`${spend.length} dia(s) lançado(s)`} />
+              <MiniStat label="Custo por sessão"    value={costPerSession != null ? fmtBRL(costPerSession) : '—'} sub={`${total} sessões`} />
+              <MiniStat label="Custo por lead"      value={costPerLead != null ? fmtBRL(costPerLead) : '—'} sub={`${ctaSessionCount} clicaram no CTA`} />
+              <MiniStat label="Custo por cadastro"  value={costPerSignup != null ? fmtBRL(costPerSignup) : '—'} sub={newTrainers != null ? `${newTrainers} novos trainers` : 'sem dado'} />
+              <MiniStat label="Custo por ativado"   value={costPerActivated != null ? fmtBRL(costPerActivated) : '—'} sub={activatedTrainers != null ? `${activatedTrainers} cadastraram aluno` : 'sem dado'} />
+            </div>
+
+            <form onSubmit={saveSpend} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', borderTop: '1px solid rgba(28,26,23,0.08)', paddingTop: 20 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.stone }}>Dia</span>
+                <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} style={inputStyle} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.stone }}>Gasto do dia (R$)</span>
+                <input type="text" inputMode="decimal" value={formAmount} onChange={e => setFormAmount(e.target.value)} placeholder="0,00" style={{ ...inputStyle, width: 120 }} />
+              </label>
+              <button type="submit" disabled={saving} style={{ ...btnStyle, opacity: saving ? 0.6 : 1 }}>
+                {saving ? 'Salvando…' : 'Salvar'}
+              </button>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: T.stone, fontWeight: 300, alignSelf: 'center' }}>
+                Salvar o mesmo dia sobrescreve o valor anterior.
+              </span>
+            </form>
+
+            {spend.length > 0 && (
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
+                <tbody>
+                  {spend.map(r => (
+                    <tr key={r.spend_date} style={{ borderBottom: '1px solid rgba(28,26,23,0.06)' }}>
+                      <td style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: T.stone, padding: '8px 0' }}>{r.spend_date}</td>
+                      <td style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: T.ink, textAlign: 'right', padding: '8px 0' }}>{fmtBRL(Number(r.amount_brl))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
 

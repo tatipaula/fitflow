@@ -1,10 +1,36 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-10 (sessão 28)
+## Última atualização: 2026-06-11 (sessão 29)
 
 ---
 
 ## Concluído
+
+### Sessão 29 — Investimento em anúncios na /trial/stats (entrada manual)
+
+Objetivo: ter o panorama completo da fase de validação cruzando gasto de mídia com o funil que a página já media.
+
+#### Decisão de arquitetura
+- Caminho da Meta Marketing API (Edge Function + System User token) foi **adiado**: a obtenção do token via Graph API Explorer travou em permissões (`ads_read`/casos de uso do app) e não compensava o esforço na fase de validação
+- Adotada **entrada manual do gasto** — mesmo painel de custo, zero dependência de token/agência. A tabela e os cards já ficam prontos para plugar a automação por cima depois
+
+#### Banco de dados
+- Migration `20260611000002_ad_spend.sql`: tabela `ad_spend` (`spend_date` PK, `amount_brl`, `source`, `updated_at`) — gasto por dia em BRL; mesmo modelo de segurança do `page_events` (anon lê/grava via cliente anônimo, protegido pela senha client-side da página). Também criou `count_trainers_in_window(p_days)` — **depois substituída e removida** (ver abaixo)
+- Migration `20260611000003_validation_activation.sql`: função `validation_activation(p_days int)` security definer que retorna **só agregados** (`new_trainers`, `activated_trainers`, `athletes_total`) — zero PII, seguro para o anon. Mede ativação real: dos trainers criados na janela, quantos cadastraram ≥1 aluno
+- Migration `20260611000004_drop_count_trainers_fn.sql`: removeu `count_trainers_in_window` (órfã — `validation_activation` já devolve `new_trainers`, então a página passou a usar só ela; uma RPC a menos por carregamento)
+
+#### Frontend — `src/pages/trial/TrialStatsPage.tsx`
+- Bloco "Investimento em anúncios — Meta Ads" com 5 cards de custo: **Gasto total**, **Custo por sessão** (÷ sessões únicas), **Custo por lead** (÷ sessões que clicaram no CTA), **Custo por cadastro** (÷ novos trainers), **Custo por ativado** (÷ trainers que cadastraram aluno — o número honesto da validação)
+- Card "Trainers ativados" na grade de KPIs do topo: `ativados/novos`, taxa de ativação % e total de alunos cadastrados
+- Input inline: data + valor → upsert em `ad_spend` (re-salvar o mesmo dia sobrescreve); `reloadKey` re-busca os dados após salvar
+- Fetch dos 3 datasets (page_events, ad_spend, `validation_activation`) paralelizado em `Promise.all`; tudo respeita o seletor de janela 7d/14d/30d
+- Componente `MiniStat` e helper `fmtBRL` adicionados
+- 2 deploys em produção ✓
+
+#### Snapshot de ativação no dia (janela 14d)
+- 6 trainers novos, **2 ativaram** (cadastraram aluno), 3 alunos no total → ~33% de ativação. Nos últimos 7d: 5 novos, só 1 ativado. Ativação (não cadastro) é o gargalo visível da validação.
+
+---
 
 ### Sessão 28 — Fix do link de convite inválido + fluxo de recuperação de senha
 
@@ -386,6 +412,6 @@
 ## Backlog
 
 - **Remover sistema de convite antigo**: rota `/invite/:token`, `InvitePage.tsx`, campo `athletes.invite_token` e helpers associados (`getAthleteByInviteToken`, `linkAthleteAccount`, `pending_invite_token` no App.tsx). Ninguém mais gera esses links desde a sessão 28; é código morto que causou o bug do link inválido por confusão entre os dois sistemas
-- **Integração Meta Ads no /trial/stats**: trazer custo por campanha, CPM, cliques e CTR via Meta Marketing API. Implementar como Supabase Edge Function (token seguro no servidor). Pré-requisitos: Ad Account ID (`act_XXXXXXXXX`) e System User token com permissão `ads_read`. Aguardando agência finalizar configuração das campanhas.
+- **Automatizar gasto de anúncios (opcional)**: a sessão 29 entregou a versão manual (tabela `ad_spend` + cards de custo na `/trial/stats`). Para automatizar, plugar uma Edge Function que puxe gasto/CPM/cliques/CTR da Meta Marketing API e faça upsert em `ad_spend` (token seguro no servidor via secret + cron diário, padrão check-billing). Pré-requisitos: Ad Account ID (`act_XXXXXXXXX`) e token com `ads_read` — obtenção do token travou no Graph API Explorer (permissões do app), reavaliar se/quando o volume justificar.
 - Integração WhatsApp para notificações de cobrança
 - Auto-completar programa via trigger já implementado — validar em produção com dados reais
