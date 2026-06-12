@@ -1,10 +1,45 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-11 (sessão 29)
+## Última atualização: 2026-06-12 (sessão 30)
 
 ---
 
 ## Concluído
+
+### Sessão 30 — Aluno de teste (demo) para ativação + fix de crash na edição de exercício
+
+Objetivo: atacar o gargalo de ativação (treinadores entram e não cadastram aluno) deixando o cara explorar o produto em 1 clique, antes de ter aluno real.
+
+#### Aluno de teste (demo)
+- Migration `20260612000001_demo_athletes.sql`: coluna `athletes.is_demo boolean default false` + recriação de `validation_activation` adicionando `where not a.is_demo` nas duas subqueries — o demo **não conta** nas métricas de ativação da `/trial/stats` (senão inflaria justamente o KPI medido)
+- `createDemoAthlete()` em `api.ts`: cria aluno `is_demo` "Aluno Exemplo" (sem convite) + "Treino A — Full Body" com 4 exercícios, buscando **vídeo real do YouTube** por exercício (mesmo `searchExerciseVideo` do fluxo normal); guarda anti-duplicado (reaproveita demo existente)
+- `deleteAthlete()` em `api.ts`: exclusão simples; FKs de workouts/sessions/badges têm `on delete cascade`
+- CTA "Criar aluno de teste" aparece **só quando o treinador não tem alunos** (`athletes.length === 0`) — card grande no Dashboard (home) + botão no estado vazio da aba Alunos. Card do demo tem selo TESTE e botão "Remover aluno de teste"
+- Tipo `Athlete` ganhou `is_demo: boolean`
+
+#### Fix de crash — edição de exercício (afetava todos os treinadores em produção)
+- Bug de **TDZ**: `nameSuggestions` era usado na linha do form de edição da aba Treinos mas declarado ~200 linhas abaixo (antes da REVIEW VIEW). Como o bloco só renderiza ao clicar "Editar", o `ReferenceError: Cannot access 'nameSuggestions' before initialization` derrubava o app inteiro (tela preta) **para qualquer treinador**, não só o demo
+- Correção: `allLibraryNames`/`nameSuggestions` movidos para antes das views (após os handlers)
+
+#### Detalhe do aluno — exercícios clicáveis (editar + vídeo)
+- Antes os exercícios no detalhe do aluno eram só leitura. Novo helper `renderAthleteDetailExercise` (usado nos treinos em programa e avulsos): cada exercício tem botão **Editar** (form inline: nome, séries, reps, carga, descanso, notas, reusa `handleSaveExercise`) e botão **Vídeo** (embed do YouTube inline)
+- `handleSaveExercise` passou a atualizar também `athleteDetailWorkoutExercises` para refletir a edição na hora
+
+#### Ícone de Cobranças
+- Sino → **cifrão em círculo** ($) no header mobile e na sidebar (o botão sempre levou a `setView('billing')`); contador vermelho de pendentes mantido; ícone do header aumentado para 22px
+
+#### Diagnóstico que virou nada
+- "Mojibake" suspeito nas notas do demo era **artefato de medição** (`python -m json.tool` lendo UTF-8 como cp1252 no Windows) — dados sempre estiveram corretos no banco. Sem correção necessária
+
+#### Campanha de email "Aluno de teste" + tracking
+- Email disparado para os **5 treinadores não-ativados** (joao victor, William, Rafael, Janeto, Luis Felipe) via nova edge function `announce-demo` (Resend, remetente `no-reply@kinevia.com.br`, CTA → `/trainer`). Não enviado a Marcos (já ativo), à conta `tatidpl`, à duplicata `luisfelipsa` nem às contas Bienporte. Função protegida por secret `ANNOUNCE_TOKEN`, deploy `--no-verify-jwt`
+- Tracking de campanha no `/trial/stats`: migration `20260612000002_email_tracking.sql` (tabela `email_events` sem select para anon + RPC agregado `campaign_funnel(text)` security definer); edge function `resend-webhook` (valida assinatura Svix via `RESEND_WEBHOOK_SECRET`, grava opened/clicked com `SR_KEY`); `announce-demo` marca `tags.campaign` e grava o `sent`. Card "Campanha de email — Aluno de teste" na página: Enviados / Abriram / Clicaram / Criaram aluno de teste
+- **Open/click tracking não ativado**: o Resend exige subdomínio de tracking (CNAME no Registro.br) e abertura é imprecisa — decisão de **pular** e ficar com Enviados + Conversão (conversão vem do banco, é o sinal que importa). Webhook já está deployado e verificando assinatura, pronto pra ligar depois se quiser
+- Baseline pós-envio: `sent=5, opened=0, clicked=0, created_demo=0`
+
+- Deploy em produção ✓ (commits `f94010d` + tracking; `kinevia.com.br` HTTP 200)
+
+---
 
 ### Sessão 29 — Investimento em anúncios na /trial/stats (entrada manual)
 

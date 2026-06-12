@@ -184,6 +184,7 @@ export default function TrialStatsPage() {
   // Investimento em anúncios (entrada manual)
   const [spend, setSpend]             = useState<{ spend_date: string; amount_brl: number }[]>([])
   const [activation, setActivation]   = useState<{ new_trainers: number; activated_trainers: number; athletes_total: number } | null>(null)
+  const [campaign, setCampaign]       = useState<{ sent: number; opened: number; clicked: number; created_demo: number } | null>(null)
   const [reloadKey, setReloadKey]     = useState(0)
   const [formDate, setFormDate]       = useState(() => new Date().toISOString().slice(0, 10))
   const [formAmount, setFormAmount]   = useState('')
@@ -213,11 +214,13 @@ export default function TrialStatsPage() {
         .gte('spend_date', sinceDay)
         .order('spend_date', { ascending: false }),
       supabase.rpc('validation_activation', { p_days: days }),
-    ]).then(([ev, sp, act]) => {
+      supabase.rpc('campaign_funnel', { p_campaign: 'demo-announce' }),
+    ]).then(([ev, sp, act, camp]) => {
       if (ev.error) { setError(ev.error.message); setLoading(false); return }
       setEvents((ev.data as PageEvent[]) ?? [])
       setSpend((sp.data as { spend_date: string; amount_brl: number }[]) ?? [])
       setActivation((Array.isArray(act.data) ? act.data[0] : act.data) ?? null)
+      setCampaign((Array.isArray(camp.data) ? camp.data[0] : camp.data) ?? null)
       setLoading(false)
     })
   }, [days, authed, reloadKey])
@@ -409,6 +412,24 @@ export default function TrialStatsPage() {
                 </tbody>
               </table>
             )}
+          </div>
+
+          {/* ── Campanha de email — Aluno de teste ── */}
+          <div style={{ background: T.paper, borderRadius: 12, padding: '28px', border: '1px solid rgba(28,26,23,0.1)', marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.stone }}>
+                Campanha de email — Aluno de teste
+              </div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: T.stone, fontWeight: 300 }}>
+                Enviada em 12/06 aos treinadores sem alunos
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
+              <MiniStat label="Enviados"               value={String(campaign?.sent ?? 0)} />
+              <MiniStat label="Abriram"                value={String(campaign?.opened ?? 0)} sub={`${pct(campaign?.opened ?? 0, campaign?.sent ?? 0)} dos enviados`} />
+              <MiniStat label="Clicaram no CTA"        value={String(campaign?.clicked ?? 0)} sub={`${pct(campaign?.clicked ?? 0, campaign?.sent ?? 0)} dos enviados`} />
+              <MiniStat label="Criaram aluno de teste" value={String(campaign?.created_demo ?? 0)} sub={`${pct(campaign?.created_demo ?? 0, campaign?.sent ?? 0)} de conversão`} />
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 24, marginBottom: 24 }}>

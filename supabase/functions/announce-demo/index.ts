@@ -76,10 +76,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { recipients } = await req.json() as { recipients: Recipient[] }
+    const { recipients, campaign } = await req.json() as { recipients: Recipient[]; campaign?: string }
     if (!Array.isArray(recipients) || recipients.length === 0) {
       return new Response(JSON.stringify({ error: 'recipients[] required' }), { status: 400, headers: corsHeaders })
     }
+    const tag = campaign ?? 'demo-announce'
+    const SR = Deno.env.get('SR_KEY')
+    const SUPA = Deno.env.get('SUPABASE_URL')
 
     const results: Array<{ email: string; ok: boolean; id?: string; error?: string }> = []
     for (const r of recipients) {
@@ -95,10 +98,20 @@ Deno.serve(async (req) => {
           to: r.email,
           subject: 'Teste o Kinevia com um aluno de demonstração',
           html: emailHtml(firstName(r.name)),
+          tags: [{ name: 'campaign', value: tag }],
         }),
       })
       const body = await res.json().catch(() => ({}))
       results.push({ email: r.email, ok: res.ok, id: body?.id, error: res.ok ? undefined : JSON.stringify(body) })
+
+      // Registra o 'sent' no funil (best-effort; não derruba o envio se falhar)
+      if (res.ok && SR && SUPA) {
+        await fetch(`${SUPA}/rest/v1/email_events?on_conflict=resend_id,type`, {
+          method: 'POST',
+          headers: { 'apikey': SR, 'Authorization': `Bearer ${SR}`, 'Content-Type': 'application/json', 'Prefer': 'resolution=ignore-duplicates' },
+          body: JSON.stringify({ resend_id: body?.id ?? null, recipient: r.email, type: 'sent', campaign: tag }),
+        }).catch(() => {})
+      }
     }
 
     return new Response(JSON.stringify({ sent: results.filter((x) => x.ok).length, total: results.length, results }), {
