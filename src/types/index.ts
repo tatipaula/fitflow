@@ -56,6 +56,7 @@ export interface Athlete {
   height_cm: number | null
   objective: string | null
   avatar_url: string | null
+  is_demo: boolean
 }
 
 export interface PaymentLog {

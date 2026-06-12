@@ -126,6 +126,67 @@ export async function createAthleteWithInvite(
   return { athlete: athleteData as Athlete, invite: inviteData as Invite }
 }
 
+/**
+ * Cria um aluno de demonstração (is_demo) já populado com um treino de exemplo,
+ * para o treinador novo explorar o produto antes de cadastrar um aluno real.
+ * Não gera convite e NÃO conta nas métricas de ativação (validation_activation).
+ */
+export async function createDemoAthlete(): Promise<Athlete | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+  const trainerId = session.user.id
+
+  // Guarda anti-duplicado: se já existe um aluno de teste, reaproveita em vez de criar outro.
+  const { data: existing } = await supabase
+    .from('athletes')
+    .select('*')
+    .eq('trainer_id', trainerId)
+    .eq('is_demo', true)
+    .limit(1)
+    .maybeSingle()
+  if (existing) return existing as Athlete
+
+  const { data: athlete, error: athleteErr } = await supabase
+    .from('athletes')
+    .insert({
+      trainer_id: trainerId,
+      name: 'Aluno Exemplo',
+      objective: 'Hipertrofia e condicionamento',
+      is_demo: true,
+    })
+    .select('*')
+    .single()
+  if (athleteErr || !athlete) { console.error('[createDemoAthlete]', athleteErr); return null }
+
+  const { data: workout, error: workoutErr } = await supabase
+    .from('workouts')
+    .insert({ trainer_id: trainerId, athlete_id: athlete.id, name: 'Treino A — Full Body', status: 'ready' })
+    .select('id')
+    .single()
+  if (workoutErr || !workout) { console.error('[createDemoAthlete workout]', workoutErr); return athlete as Athlete }
+
+  const demoExercises = [
+    { name: 'Agachamento livre', sets: 4, reps: 10, weight_kg: 40, rest_seconds: 90, notes: 'Desça até a coxa ficar paralela ao chão.' },
+    { name: 'Supino reto', sets: 4, reps: 8, weight_kg: 30, rest_seconds: 90, notes: 'Controle a descida da barra.' },
+    { name: 'Remada curvada', sets: 3, reps: 12, weight_kg: 25, rest_seconds: 60, notes: 'Mantenha a coluna neutra.' },
+    { name: 'Prancha', sets: 3, reps: 1, weight_kg: null, rest_seconds: 45, notes: '30 a 45 segundos por série.' },
+  ]
+  // Busca um vídeo real do YouTube para cada exercício, igual ao fluxo normal de treino.
+  const rows = await Promise.all(demoExercises.map(async (ex, i) => {
+    const videos = await searchExerciseVideo(ex.name)
+    return { workout_id: workout.id, ...ex, youtube_video_id: videos[0]?.id ?? null, order_index: i }
+  }))
+  await supabase.from('exercises').insert(rows)
+
+  return athlete as Athlete
+}
+
+export async function deleteAthlete(athleteId: string): Promise<boolean> {
+  const { error } = await supabase.from('athletes').delete().eq('id', athleteId)
+  if (error) { console.error('[deleteAthlete]', error); return false }
+  return true
+}
+
 export async function getInviteByToken(token: string): Promise<InviteWithAthlete | null> {
   const { data, error } = await supabase
     .from('invites')

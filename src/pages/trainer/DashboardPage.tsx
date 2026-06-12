@@ -15,6 +15,7 @@ import {
   getProgramsByAthlete, createProgram, assignWorkoutToProgram, removeWorkoutFromProgram,
   getTrainerPrograms, confirmPayment, calcOverdueMonths, getAthleteEvolution,
   trialDaysLeft, createCheckoutSession, getPaymentLogs, updateAthleteProfile, createInviteForAthlete,
+  createDemoAthlete, deleteAthlete,
 } from '@/lib/api'
 import type { AthleteEvolution } from '@/lib/api'
 import type { PaymentLog } from '@/types'
@@ -67,6 +68,8 @@ export default function DashboardPage() {
   const [athleteError, setAthleteError] = useState<string | null>(null)
   const [athleteSearch, setAthleteSearch] = useState('')
   const [justCreated, setJustCreated] = useState<{ athlete: Athlete; invite: Invite } | null>(null)
+  const [creatingDemo, setCreatingDemo] = useState(false)
+  const [removingDemoId, setRemovingDemoId] = useState<string | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [sendingAccess, setSendingAccess] = useState<string | null>(null)
   const [accessSent, setAccessSent] = useState<string | null>(null)
@@ -242,6 +245,27 @@ export default function DashboardPage() {
     setShowAddAthlete(false)
     setJustCreated(result)
     setAddingAthlete(false)
+  }
+
+  async function handleCreateDemoAthlete() {
+    setCreatingDemo(true)
+    const athlete = await createDemoAthlete()
+    if (athlete) {
+      setAthletes((p) => [athlete, ...p])
+      const w = await getWorkouts(athlete.trainer_id)
+      setWorkouts(w)
+    }
+    setCreatingDemo(false)
+  }
+
+  async function handleRemoveDemoAthlete(athleteId: string) {
+    setRemovingDemoId(athleteId)
+    const ok = await deleteAthlete(athleteId)
+    if (ok) {
+      setAthletes((p) => p.filter((a) => a.id !== athleteId))
+      setWorkouts((p) => p.filter((w) => w.athlete_id !== athleteId))
+    }
+    setRemovingDemoId(null)
   }
 
   async function handleViewAthleteDetail(athlete: Athlete) {
@@ -520,6 +544,10 @@ export default function DashboardPage() {
         [workoutId]: (prev[workoutId] ?? []).map((e) => e.id === exId ? { ...e, ...updated } : e),
       }))
       setDetectedExercises((prev) => prev.map((e) => e.id === exId ? { ...e, ...updated } : e))
+      setAthleteDetailWorkoutExercises((prev) => ({
+        ...prev,
+        [workoutId]: (prev[workoutId] ?? []).map((e) => e.id === exId ? { ...e, ...updated } : e),
+      }))
     }
     setEditingExerciseId(null)
   }
@@ -714,7 +742,7 @@ export default function DashboardPage() {
       <div style={{ padding: '16px 0 8px', borderTop: '1px solid var(--ink-4)', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button onClick={() => setView('billing')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-md)', background: view === 'billing' ? 'var(--accent-soft)' : 'transparent', border: 'none', cursor: 'pointer', color: view === 'billing' ? 'var(--accent)' : pendingBillingCount > 0 ? 'var(--accent)' : 'var(--fg-3)', fontSize: 13, width: '100%', textAlign: 'left' }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5a2.3 2.3 0 00-2.2-1.5h-.6a2.1 2.1 0 000 4.2h.6a2.1 2.1 0 010 4.2h-.6a2.3 2.3 0 01-2.2-1.5"/><path d="M12 6.5v1.5m0 8v1.5"/></svg>
             {pendingBillingCount > 0 && (
               <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 15, height: 15, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
                 {pendingBillingCount}
@@ -737,7 +765,7 @@ export default function DashboardPage() {
   // ── Mobile header ─────────────────────────────────────────────────────────
   const bellButton = (
     <button onClick={() => setView('billing')} style={{ position: 'relative', width: 38, height: 38, borderRadius: 999, background: view === 'billing' ? 'var(--accent-soft)' : 'transparent', border: `1px solid ${view === 'billing' ? 'var(--accent)' : 'var(--ink-4)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--fg-2)" strokeWidth="1.5" strokeLinecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--fg-2)" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5a2.3 2.3 0 00-2.2-1.5h-.6a2.1 2.1 0 000 4.2h.6a2.1 2.1 0 010 4.2h-.6a2.3 2.3 0 01-2.2-1.5"/><path d="M12 6.5v1.5m0 8v1.5"/></svg>
       {pendingBillingCount > 0 && (
         <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontFamily: "'JetBrains Mono', monospace" }}>
           {pendingBillingCount}
@@ -782,6 +810,76 @@ export default function DashboardPage() {
   const contentPad = isMobile ? '20px 20px' : '32px 40px'
   const contentStyle: React.CSSProperties = { flex: 1, overflow: 'auto', padding: contentPad, paddingBottom: isMobile ? '90px' : '40px' }
 
+  const showDemoCta = athletes.length === 0
+
+  // Sugestões de autocomplete para edição de exercício — declaradas aqui (antes
+  // das views) para não cair em TDZ quando o form de edição é renderizado.
+  const allLibraryNames = EXERCISE_LIBRARY.flatMap((g) => g.exercises.map((e) => e.name))
+  const nameSuggestions = nameDropdownOpen
+    ? allLibraryNames.filter((n) => n.toLowerCase().includes(exerciseEdit.name.toLowerCase())).slice(0, 6)
+    : []
+
+  // Linha de exercício no detalhe do aluno: clicável para editar inline (nome, séries,
+  // reps, carga, descanso e notas). Reusa exerciseEdit / handleSaveExercise.
+  const inpSm: React.CSSProperties = { width: '100%', height: 32, padding: '0 8px', background: 'var(--ink-2)', border: '1px solid var(--ink-4)', borderRadius: 'var(--r-md)', fontSize: 12, color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box' }
+  const renderAthleteDetailExercise = (ex: Exercise, ei: number, workoutId: string) => {
+    const isEditing = editingExerciseId === ex.id
+    if (isEditing) {
+      return (
+        <div key={ex.id} style={{ background: 'var(--ink-2)', borderRadius: 'var(--r-md)', border: '1px solid var(--accent)', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input type="text" value={exerciseEdit.name} onChange={(e) => setExerciseEdit((p) => ({ ...p, name: e.target.value }))} placeholder="Exercício" style={inpSm}/>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            {([['Séries', 'sets'], ['Reps', 'reps'], ['Kg', 'weight_kg'], ['Desc', 'rest_seconds']] as const).map(([label, key]) => (
+              <div key={key}>
+                <div style={{ fontSize: 9, color: 'var(--fg-3)', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{label}</div>
+                <input type="number" min="0" step={key === 'weight_kg' ? '0.5' : '1'} value={exerciseEdit[key]} onChange={(e) => setExerciseEdit((p) => ({ ...p, [key]: e.target.value }))} style={{ ...inpSm, textAlign: 'center' }}/>
+              </div>
+            ))}
+          </div>
+          <input type="text" value={exerciseEdit.notes} onChange={(e) => setExerciseEdit((p) => ({ ...p, notes: e.target.value }))} placeholder="Notas (opcional)" style={inpSm}/>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => handleSaveExercise(workoutId, ex.id)} style={{ flex: 1, height: 32, borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
+            <button onClick={() => setEditingExerciseId(null)} style={{ height: 32, padding: '0 12px', borderRadius: 999, background: 'transparent', color: 'var(--fg-3)', border: '1px solid var(--ink-4)', fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
+          </div>
+        </div>
+      )
+    }
+    const videoOpen = expandedVideoId === ex.id
+    return (
+      <div key={ex.id}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+          <span className="num" style={{ fontSize: 9, color: 'var(--fg-4)', width: 14, flexShrink: 0 }}>{ei + 1}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 12, fontWeight: 500 }}>{ex.name}</span>
+            <span className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginLeft: 6 }}>
+              {ex.sets}×{ex.reps}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rest_seconds ? ` · ${ex.rest_seconds}s` : ''}
+            </span>
+          </div>
+          {ex.youtube_video_id && (
+            <button onClick={() => setExpandedVideoId(videoOpen ? null : ex.id)} title="Ver vídeo"
+              style={{ flexShrink: 0, height: 26, padding: '0 10px', borderRadius: 999, background: videoOpen ? 'var(--accent-soft)' : 'transparent', border: `1px solid ${videoOpen ? 'var(--accent)' : 'var(--ink-4)'}`, color: videoOpen ? 'var(--accent)' : 'var(--fg-3)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              Vídeo
+            </button>
+          )}
+          <button onClick={() => startEditExercise(ex)} title="Editar exercício"
+            style={{ flexShrink: 0, height: 26, padding: '0 10px', borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 11, cursor: 'pointer' }}>
+            Editar
+          </button>
+        </div>
+        {videoOpen && ex.youtube_video_id && (
+          <div style={{ padding: '4px 0 8px' }}>
+            <div style={{ aspectRatio: '16/9', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+              <iframe src={getYouTubeEmbedUrl(ex.youtube_video_id)} title={ex.name}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen style={{ width: '100%', height: '100%', border: 'none' }}/>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // ── HOME VIEW ─────────────────────────────────────────────────────────────
   const homeView = (
     <div style={contentStyle}>
@@ -789,6 +887,21 @@ export default function DashboardPage() {
         <div className="display" style={{ fontSize: isMobile ? 32 : 40 }}>Dashboard</div>
         <div style={{ fontSize: 14, color: 'var(--fg-3)', marginTop: 4 }}>Bem-vindo de volta, {trainer?.name?.split(' ')[0] ?? 'Coach'}</div>
       </div>
+
+      {showDemoCta && (
+        <Card style={{ padding: isMobile ? 20 : 24, marginBottom: 28, border: '1px solid var(--accent)', background: 'var(--accent-soft)', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: isMobile ? 17 : 19, fontWeight: 700, color: 'var(--fg-1)', marginBottom: 6 }}>Veja como funciona em 1 clique</div>
+            <div style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.5 }}>
+              Crie um aluno de teste já com um treino de exemplo e explore o app inteiro — sem precisar cadastrar ninguém de verdade ainda.
+            </div>
+          </div>
+          <button onClick={handleCreateDemoAthlete} disabled={creatingDemo}
+            style={{ flexShrink: 0, height: 46, padding: '0 24px', borderRadius: 999, background: 'var(--accent)', color: 'var(--accent-ink)', border: 'none', fontSize: 15, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, opacity: creatingDemo ? 0.6 : 1, width: isMobile ? '100%' : 'auto', justifyContent: 'center' }}>
+            {creatingDemo ? 'Criando...' : <>{KVIcon.plus(18, 'var(--accent-ink)')} Criar aluno de teste</>}
+          </button>
+        </Card>
+      )}
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, minmax(0, 1fr))' : 'repeat(3, 1fr)', gap: 14, marginBottom: 28 }}>
@@ -1165,9 +1278,20 @@ export default function DashboardPage() {
       )}
 
       {filteredAthletes.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg-4)', fontSize: 14 }}>
-          {athletes.length === 0 ? 'Nenhum atleta cadastrado ainda.' : 'Nenhum resultado.'}
-        </div>
+        athletes.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '56px 24px', color: 'var(--fg-4)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <div style={{ fontSize: 14 }}>Nenhum atleta cadastrado ainda.</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-3)', maxWidth: 320 }}>
+              Quer ver como funciona antes de cadastrar um aluno real? Crie um aluno de teste já com um treino de exemplo.
+            </div>
+            <button onClick={handleCreateDemoAthlete} disabled={creatingDemo}
+              style={{ height: 42, padding: '0 20px', borderRadius: 999, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: creatingDemo ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {creatingDemo ? 'Criando...' : <>{KVIcon.plus(16, 'var(--accent)')} Criar aluno de teste</>}
+            </button>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg-4)', fontSize: 14 }}>Nenhum resultado.</div>
+        )
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {filteredAthletes.map((a) => {
@@ -1181,7 +1305,12 @@ export default function DashboardPage() {
                   <KVAvatar name={a.name} size={44} tone="warm" src={a.avatar_url}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                        {a.is_demo && (
+                          <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: '2px 7px', borderRadius: 999, background: 'var(--accent-soft)', color: 'var(--accent)' }}>TESTE</span>
+                        )}
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                         {trainerBadges.filter((b) => b.athlete_id === a.id).slice(0, 3).map((b) => (
                           <span key={b.id} title={b.title} style={{ fontSize: 14 }}>{b.icon}</span>
@@ -1264,6 +1393,13 @@ export default function DashboardPage() {
                     </>
                   )
                 })()}
+                {a.is_demo && (
+                  <button onClick={(e) => { e.stopPropagation(); handleRemoveDemoAthlete(a.id) }}
+                    disabled={removingDemoId === a.id}
+                    style={{ marginTop: 12, width: '100%', height: 36, borderRadius: 999, background: 'transparent', border: '1px solid var(--ink-4)', color: 'var(--fg-3)', fontSize: 12, cursor: 'pointer', opacity: removingDemoId === a.id ? 0.6 : 1 }}>
+                    {removingDemoId === a.id ? 'Removendo...' : 'Remover aluno de teste'}
+                  </button>
+                )}
               </Card>
             )
           })}
@@ -1629,11 +1765,6 @@ export default function DashboardPage() {
   )
 
   // ── REVIEW VIEW ───────────────────────────────────────────────────────────
-  const allLibraryNames = EXERCISE_LIBRARY.flatMap((g) => g.exercises.map((e) => e.name))
-  const nameSuggestions = nameDropdownOpen
-    ? allLibraryNames.filter((n) => n.toLowerCase().includes(exerciseEdit.name.toLowerCase())).slice(0, 6)
-    : []
-
   const reviewAthleteObj = athletes.find((a) => a.id === selectedAthleteId) ?? athletes.find((a) => a.id === processingWorkout?.athlete_id)
 
   const reviewView = (
@@ -2191,17 +2322,7 @@ export default function DashboardPage() {
                                             <LoadingSpinner size="sm" message="Carregando exercícios…"/>
                                           ) : wExercises.length === 0 ? (
                                             <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>Sem exercícios cadastrados.</div>
-                                          ) : wExercises.map((ex, ei) => (
-                                            <div key={ex.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '4px 0' }}>
-                                              <span className="num" style={{ fontSize: 9, color: 'var(--fg-4)', width: 14, flexShrink: 0 }}>{ei + 1}</span>
-                                              <div style={{ flex: 1, minWidth: 0 }}>
-                                                <span style={{ fontSize: 12, fontWeight: 500 }}>{ex.name}</span>
-                                                <span className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginLeft: 6 }}>
-                                                  {ex.sets}×{ex.reps}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rest_seconds ? ` · ${ex.rest_seconds}s` : ''}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          ))}
+                                          ) : wExercises.map((ex, ei) => renderAthleteDetailExercise(ex, ei, w.id))}
                                         </div>
                                       )}
                                     </div>
@@ -2247,17 +2368,7 @@ export default function DashboardPage() {
                                     <LoadingSpinner size="sm" message="Carregando exercícios…"/>
                                   ) : wExercises.length === 0 ? (
                                     <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>Sem exercícios cadastrados.</div>
-                                  ) : wExercises.map((ex, ei) => (
-                                    <div key={ex.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '4px 0' }}>
-                                      <span className="num" style={{ fontSize: 9, color: 'var(--fg-4)', width: 14, flexShrink: 0 }}>{ei + 1}</span>
-                                      <div style={{ flex: 1, minWidth: 0 }}>
-                                        <span style={{ fontSize: 12, fontWeight: 500 }}>{ex.name}</span>
-                                        <span className="num" style={{ fontSize: 10, color: 'var(--fg-3)', marginLeft: 6 }}>
-                                          {ex.sets}×{ex.reps}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}{ex.rest_seconds ? ` · ${ex.rest_seconds}s` : ''}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
+                                  ) : wExercises.map((ex, ei) => renderAthleteDetailExercise(ex, ei, w.id))}
                                 </div>
                               )}
                               {activePrograms.length > 0 && (
