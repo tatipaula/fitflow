@@ -1,10 +1,34 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-12 (sessão 30)
+## Última atualização: 2026-06-13 (sessão 31)
 
 ---
 
 ## Concluído
+
+### Sessão 31 — Tracking do funil de ativação in-app + fix da conta órfã na raiz
+
+Objetivo: responder "onde os cadastros travam" com dado real (hoje só dava pra inferir pela trilha athletes/invites/workouts) e corrigir a causa raiz da conta órfã que infla a contagem de cadastros.
+
+#### Diagnóstico do dia (reconstrução do funil por trilha de dados)
+- Dos cadastros recentes, **4 travaram no estágio 1** (Janeto, Rafael, William, João Victor: 0 alunos, 0 convites, 0 treinos — nunca passaram do "criar primeiro aluno")
+- **Luis Felipe (`luisfelipedesaconsultoria`) ativou 100%** em 11/06: conta → aluno → convite aceito → treino `ready`
+- O `luisfelipsa@gmail.com` que parecia cadastro duplicado **não é personal real**: é conta órfã criada quando o aluno do Luis Felipe aceitou o convite. Base tem **7 personais reais, não 8**
+- Sintoma de UI no convite: Luis Felipe clicou "gerar convite" ~13× em 14s pro mesmo aluno (botão sem feedback)
+
+#### Instrumentação do funil de ativação in-app
+- Migration `20260613000001_page_events_user_id.sql`: coluna `page_events.user_id uuid` (nullable, sem FK; landing /trial continua null)
+- `src/lib/analytics.ts`: `track()` ganhou 3º param `userId` (call sites in-app passam `trainer.id` do authStore; **nunca** chamar `auth.getUser()` dentro de track por causa do deadlock do onAuthStateChange). 7 eventos novos: `app_onboarding_view`, `create_athlete_opened`, `athlete_created`, `invite_generated`, `invite_copied`, `workout_started`, `workout_created`
+- `src/pages/trainer/DashboardPage.tsx`: eventos "opened/started" via useEffect (`showAddAthlete`, `view==='recording'`); eventos de sucesso dentro dos handlers
+- Migration `20260613000002_activation_funnel.sql`: RPC `activation_funnel(p_days)` security definer (zero PII, mesmo padrão de `validation_activation`) — conta trainers distintos por etapa. Ler via REST `/rpc/activation_funnel` body `{"p_days":N}`
+- **Decisão de escopo (validação): sem card no /trial/stats** — leitura ad-hoc primeiro, construir UI só depois do dado provar valor. Eventos começam em 0 até o deploy concluir + uso
+
+#### Fix da conta órfã na raiz
+- Causa: a guarda `if role='athlete' then return` em `handle_new_trainer()` (trigger `on_auth_user_created`) foi adicionada em `20260410000001` mas **removida sem querer em `20260604000001_stripe_plans.sql`** ao reescrever a função pro trial. Desde 04/06 todo atleta que aceita convite (signUp `role='athlete'`) ganha linha fantasma em `trainers`
+- Migration `20260613000003_fix_handle_new_trainer_athlete_guard.sql`: re-adiciona a guarda + preserva o trial. Verificado seguro nos 3 fluxos (personal sem role → cria; atleta com role → não cria; demo nem passa pelo trigger). Só afeta inserts NOVOS em auth.users
+
+#### Git
+- 2 commits em `master` pushados: `dcee15a` (tracking) + `a9b5a92` (fix da órfã). Migrations aplicadas no banco via `supabase.exe db push`; `tsc --noEmit` limpo
 
 ### Sessão 30 — Aluno de teste (demo) para ativação + fix de crash na edição de exercício
 
@@ -439,6 +463,8 @@ Objetivo: ter o panorama completo da fase de validação cruzando gasto de mídi
 
 ## Pendências imediatas
 
+- **Limpar contas órfãs antigas**: o fix da sessão 31 impede novas, mas linhas órfãs pré-13/06 (ex.: `luisfelipsa@gmail.com`) continuam em `trainers` inflando a contagem. Fazer scan e remover com segurança (verificar que não têm alunos/treinos reais vinculados)
+- **Ler o funil de ativação**: daqui a alguns dias (após deploy + uso) chamar `activation_funnel(p_days)` via REST e ver onde o funil despenca de verdade
 - **Stripe livemode**: testar fluxo completo com cartão real (até agora testado apenas com `sk_test_`)
 - **Emails — verificar CTA**: link dos emails corrigido de `/planos` para `/trainer`; confirmar que botão leva ao checkout corretamente com trainer em trial real
 
