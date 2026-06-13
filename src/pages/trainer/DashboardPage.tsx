@@ -20,6 +20,7 @@ import {
 import type { AthleteEvolution } from '@/lib/api'
 import type { PaymentLog } from '@/types'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
+import { track } from '@/lib/analytics'
 import { EXERCISE_LIBRARY } from '@/lib/exerciseLibrary'
 import type { Athlete, AthleteRankingStats, Badge, Program, ProgramWithWorkouts, Workout, Exercise, Invite, ParqResponse, ClassCheckin } from '@/types'
 
@@ -209,6 +210,24 @@ export default function DashboardPage() {
       .finally(() => setLoadingData(false))
   }, [trainer])
 
+  // --- Funil de ativação in-app (track nunca quebra a página) ---
+  // Dispara uma vez por sessão do app, quando os dados do trainer terminam de
+  // carregar: registra que ele voltou ao app e quantos alunos reais já tem.
+  const onboardingTrackedRef = useRef(false)
+  useEffect(() => {
+    if (loadingData || !trainer || onboardingTrackedRef.current) return
+    onboardingTrackedRef.current = true
+    track('app_onboarding_view', { real_athletes: athletes.filter((a) => !a.is_demo).length }, trainer.id)
+  }, [loadingData, trainer, athletes])
+
+  useEffect(() => {
+    if (showAddAthlete) track('create_athlete_opened', {}, trainer?.id)
+  }, [showAddAthlete])
+
+  useEffect(() => {
+    if (view === 'recording') track('workout_started', { athlete_id: selectedAthleteId || null }, trainer?.id)
+  }, [view])
+
   useEffect(() => {
     if (!isRecording) { setRecordingSeconds(0); return }
     const t = setInterval(() => setRecordingSeconds((s) => s + 1), 1000)
@@ -240,6 +259,7 @@ export default function DashboardPage() {
       weight_kg: newWeight ? parseFloat(newWeight) : undefined,
     })
     if (!result) { setAthleteError('Não foi possível adicionar.'); setAddingAthlete(false); return }
+    track('athlete_created', { has_email: !!result.athlete.email, has_phone: !!result.athlete.phone }, trainer?.id)
     setAthletes((p) => [result.athlete, ...p])
     setNewName(''); setNewEmail(''); setNewPhone(''); setNewWeight('')
     setShowAddAthlete(false)
@@ -383,6 +403,7 @@ export default function DashboardPage() {
         setTimeout(() => setAccessSent(null), 3000)
         return
       }
+      track('invite_generated', { channel }, trainer.id)
       const inviteLink = `${window.location.origin}/convite/${freshInvite.token}`
       if (channel === 'email' && athlete.email) {
         await supabase.functions.invoke('send-invite', {
@@ -395,6 +416,7 @@ export default function DashboardPage() {
         window.open(`https://wa.me/${athlete.phone.replace(/\D/g, '')}?text=${msg}`, '_blank')
       } else {
         await navigator.clipboard.writeText(inviteLink)
+        track('invite_copied', { from: 'access-menu' }, trainer.id)
       }
       setAccessSentLabel(channel === 'copy' ? 'copiado' : 'enviado')
       setAccessSent(athlete.id)
@@ -471,6 +493,7 @@ export default function DashboardPage() {
     setProcessing(true); setProcessingError(null); setDetectedExercises([])
     const workout = await createWorkout({ athlete_id: selectedAthleteId, name: workoutName.trim() || undefined })
     if (!workout) { setProcessingError('Não foi possível criar o treino.'); setProcessing(false); return }
+    track('workout_created', { mode: inputMode }, trainer?.id)
     setProcessingWorkout(workout); setWorkouts((p) => [workout, ...p]); setView('processing')
     const result = inputMode === 'text'
       ? await processWorkoutText(workout.id, workoutText, selectedAthleteId)
@@ -601,7 +624,7 @@ export default function DashboardPage() {
     setWorkoutText((p) => p.trim() ? `${p.trim()}\n${line}` : line)
   }
 
-  function copyConviteLink(token: string) { navigator.clipboard.writeText(`${window.location.origin}/convite/${token}`) }
+  function copyConviteLink(token: string) { navigator.clipboard.writeText(`${window.location.origin}/convite/${token}`); track('invite_copied', { from: 'post-create' }, trainer?.id) }
 
   async function handleCheckIn(athleteId: string) {
     setCheckingInId(athleteId)
