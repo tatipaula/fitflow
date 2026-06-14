@@ -31,7 +31,7 @@ Objetivo: re-engajar treinadores não-ativados com um lembrete do aluno de teste
 - A `RESEND_API_KEY` **não está no env local** (só `VITE_SUPABASE_*` no `.env`); existe apenas como secret do Supabase (valor não-recuperável). Fonte: painel Resend → API Keys (ou criar nova key, o que NÃO afeta as existentes).
 
 #### Pendências abertas desta sessão
-- Commitar (ou reverter/parametrizar) a alteração de `announce-demo/index.ts`.
+- ✅ Resolvido: texto da Copa revertido pro genérico em `announce-demo/index.ts` (mantidos `reply_to` e guarda do nome-email), função redeployada e commitada (`f64451f`, pushada em `master`).
 - Configurar open tracking no Resend quando quiser medir abertura de campanha (passo a passo acima).
 - Opcional: apontar o card de campanha do `/trial/stats` (hoje fixo em `'demo-announce'`, `TrialStatsPage.tsx:217`) para `'copa-demo'` ou torná-lo selecionável.
 - Limpeza da linha órfã `luisfelipsa` em `trainers` (continua inflando contagem).
