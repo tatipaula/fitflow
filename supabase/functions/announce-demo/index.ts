@@ -8,7 +8,10 @@ const corsHeaders = {
 type Recipient = { email: string; name?: string }
 
 function firstName(name?: string): string {
-  const n = (name ?? '').trim().split(/\s+/)[0] || 'Personal'
+  const raw = (name ?? '').trim()
+  // Se o "nome" for na verdade um email (cadastro sem nome real), usa fallback.
+  if (!raw || raw.includes('@')) return 'Personal'
+  const n = raw.split(/\s+/)[0] || 'Personal'
   return n.charAt(0).toUpperCase() + n.slice(1)
 }
 
@@ -56,7 +59,7 @@ function emailHtml(name: string): string {
       </a>
 
       <p style="color:#B8B2A3;font-size:14px;line-height:1.6;margin-bottom:0;">
-        Quando estiver pronto, é só remover o aluno de teste e cadastrar o real. Qualquer dúvida, responda a este e-mail.
+        Quando estiver pronto, é só remover o aluno de teste e cadastrar o real. Qualquer dúvida, é só responder este e-mail que a gente te ajuda.
       </p>
 
       <div style="margin-top:40px;padding-top:24px;border-top:1px solid #1F1D1A;">
@@ -95,6 +98,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           from: 'Kinevia <no-reply@kinevia.com.br>',
+          reply_to: 'suporte@kinevia.com.br',
           to: r.email,
           subject: 'Teste o Kinevia com um aluno de demonstração',
           html: emailHtml(firstName(r.name)),

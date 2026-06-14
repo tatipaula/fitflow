@@ -1,10 +1,40 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-13 (sessão 31)
+## Última atualização: 2026-06-14 (sessão 32)
 
 ---
 
 ## Concluído
+
+### Sessão 32 — Campanha de email "Copa" (aluno de teste) + diagnóstico do tracking de abertura/clique
+
+Objetivo: re-engajar treinadores não-ativados com um lembrete do aluno de teste usando o gancho da Copa do Mundo, e entender por que o card de campanha do /trial/stats não mostra abertura/clique.
+
+#### Cadastros (snapshot 14/06)
+- **1 cadastro novo** desde a sessão 31: `eduardo.espacoideal@gmail.com` (13/06 19:09). Personal real (nenhum convite aceito coincide com o horário — não é órfã), mas travou no estágio 1 (0 alunos).
+- Base atual: 9 linhas em `trainers` = 7 personais reais + você (`tatidpl`) + 1 órfã (`luisfelipsa`, segue na base; fix da sessão 31 só barra inserts novos).
+- `/trial/stats` mostra "7" = janela de 7 dias da `validation_activation`, já incluindo o Eduardo (e ainda inflada pela órfã `luisfelipsa`). Reais na janela = 6, sendo 1 ativado.
+- **Ativados (têm aluno real, não-demo):** Marcos (Marcos Cabral, Luiza Melucci) e Luis Felipe (LF teste). Os demais reais têm 0 alunos.
+
+#### Campanha de email `copa-demo`
+- Reaproveitada a edge function `announce-demo` (guarda por `ANNOUNCE_TOKEN`, deploy `--no-verify-jwt`). Editado `index.ts`: gancho da Copa no topo (Brasil 1×1 Marrocos, fase de grupos) + metáfora "aquecimento antes de escalar o time titular"; assunto novo "Brasil 1×1 — e o seu treino já pode entrar em campo"; **`reply_to: suporte@kinevia.com.br`** (o `from` segue `no-reply`, que só envia — frase "responda este e-mail" agora vai pra caixa real); guarda em `firstName()` contra "nome" que é email (caso do Eduardo → vira "Personal").
+- `ANNOUNCE_TOKEN` foi **redefinido** (valor antigo não era recuperável, só digest) para disparar; é só trava manual, sem impacto em produção.
+- **Enviado para os 5 não-ativados:** jv.cavalcanti07, felipewilliam3, rafaelbucatte, janetolm3, eduardo.espacoideal. Tag `copa-demo`. 5/5 ok. Não enviado a Marcos/Luis Felipe (ativados), `tatidpl` nem à órfã `luisfelipsa`.
+- ⚠️ **Código de `announce-demo/index.ts` foi alterado e deployado, mas NÃO commitado.** Texto da Copa está hard-coded — reverter/parametrizar antes de reusar a função pra outra campanha.
+
+#### Diagnóstico: tracking de abertura/clique não funciona (e por quê)
+- `campaign_funnel('demo-announce')` e `('copa-demo')` ambos com **0 abertos / 0 cliques**. Na tabela `email_events` **só existem eventos `sent`** (gravados inline pela própria `announce-demo`) — nenhum `delivered/opened/clicked` jamais entrou.
+- A função `resend-webhook` está **saudável e no ar** (GET→405, POST sem assinatura→401, ou seja `RESEND_WEBHOOK_SECRET` setado e validando). O problema é no **lado do Resend**: webhook nunca entregou evento.
+- **Causa confirmada via doc do Resend:** open/click tracking **exige um subdomínio de tracking + CNAME verificado** (`tracking_subdomain`, ex. `links.kinevia.com.br` → `linksN.resend-dns.com`). Sem isso, o Resend nem gera os eventos. É config **no nível do domínio** (vale pra todos os emails, inclusive transacionais), tudo-ou-nada por flag.
+- **Decisão: adiado.** Usuária optou por não configurar agora. Quando retomar: ligar **só `open_tracking`** (pixel, risco zero pros transacionais) via `PATCH /domains/{id}` `{"open_tracking":true,"tracking_subdomain":"links"}`, adicionar o CNAME no DNS de `kinevia.com.br`, e `POST /domains/{id}/verify`. Click tracking reescreveria links transacionais (reset de senha, convite, checkout) — só ligar se quiser mesmo medir clique.
+- Nota: tracking não é retroativo — os emails `copa-demo` já enviados não serão rastreáveis; só vale pra envios futuros.
+- A `RESEND_API_KEY` **não está no env local** (só `VITE_SUPABASE_*` no `.env`); existe apenas como secret do Supabase (valor não-recuperável). Fonte: painel Resend → API Keys (ou criar nova key, o que NÃO afeta as existentes).
+
+#### Pendências abertas desta sessão
+- Commitar (ou reverter/parametrizar) a alteração de `announce-demo/index.ts`.
+- Configurar open tracking no Resend quando quiser medir abertura de campanha (passo a passo acima).
+- Opcional: apontar o card de campanha do `/trial/stats` (hoje fixo em `'demo-announce'`, `TrialStatsPage.tsx:217`) para `'copa-demo'` ou torná-lo selecionável.
+- Limpeza da linha órfã `luisfelipsa` em `trainers` (continua inflando contagem).
 
 ### Sessão 31 — Tracking do funil de ativação in-app + fix da conta órfã na raiz
 
