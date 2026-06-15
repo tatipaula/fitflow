@@ -1,10 +1,28 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-14 (sessão 32)
+## Última atualização: 2026-06-15 (sessão 33)
 
 ---
 
 ## Concluído
+
+### Sessão 33 — Snapshot de cadastros + 2º disparo do lembrete "aluno de teste"
+
+Objetivo: contar cadastros (excl. `tatidpl`, Marcos, João Victor), ver quem tem alunos e quem usa o aluno de teste; depois re-engajar os não-ativados.
+
+#### Snapshot 15/06 (8 cadastros, excl. tatidpl/Marcos/João Victor)
+- **Com aluno real (2):** Luis Felipe (1 aluno) e Rodrigo Pereira (1 aluno + 1 demo — único que fez o caminho completo).
+- **Usando aluno de teste / demo (3):** Janeto Lucas, Rodrigo Pereira, Henrique.
+- **Não-ativados (0 aluno real):** William Felipe, Rafael Bucatte, Janeto Lucas, Eduardo (`eduardo.espacoideal`), Jociel Ferreira, Henrique.
+- Cadastros novos desde a sessão 32: Jociel Ferreira (14/06), Rodrigo Pereira (14/06), Henrique (15/06). Ativação segue em ~25% — gargalo é "criar primeiro aluno".
+
+#### 2º disparo do lembrete do aluno de teste (campanha `demo-reminder-jun2026`)
+- Enviado via `announce-demo` (template **evergreen** já commitado em `f64451f`, sessão 32 — assunto "Teste o Kinevia com um aluno de demonstração", CTA "Criar meu aluno de teste"). Nada de Copa.
+- **Destinatários (4, todos `ok`):** felipewilliam3, rafaelbucatte, eduardo.espacoideal, jocielf48. Decisão da usuária: incluir William e Rafael mesmo já tendo recebido o disparo `copa-demo` (sessão 32). Não incluídos Janeto/Henrique (já criaram o aluno de teste).
+- Registrado no funil: 4× `sent` em `email_events`, campanha `demo-reminder-jun2026`.
+- ⚠️ **`ANNOUNCE_TOKEN` foi rotacionado de novo** (valor anterior não-recuperável). Sempre que reusar a função, redefinir o secret antes de disparar.
+- Redeploy da `announce-demo` (v9→v10): conteúdo idêntico ao commitado (evergreen), só pra garantir o ambiente — não houve mudança de código a commitar.
+
 
 ### Sessão 32 — Campanha de email "Copa" (aluno de teste) + diagnóstico do tracking de abertura/clique
 
