@@ -1,10 +1,31 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-15 (sessão 33)
+## Última atualização: 2026-06-17 (sessão 34)
 
 ---
 
 ## Concluído
+
+### Sessão 34 — Snapshot de cadastros + 3º disparo do lembrete "aluno de teste"
+
+Objetivo: recontar cadastros (excl. `tatidpl`, Marcos, João Victor), ver quem ativou aluno real vs aluno de teste, e re-engajar os não-ativados com o lembrete do aluno de teste.
+
+#### Snapshot 17/06 (12 cadastros, excl. tatidpl/Marcos/João Victor)
+- Base cresceu: `trainers` agora com **15 linhas** (12 + os 3 excluídos). 4 cadastros novos desde a sessão 33: **Guga Binotto** (16/06), **Leonardo Fernandes** (16/06), **João Pedro Molter** (16/06), **Pedro Erivelton** (17/06).
+- **Com aluno real (2 → ~17%):** Luis Felipe (1 aluno) e Rodrigo Pereira (1 aluno + 1 demo — único caminho completo).
+- **Criaram aluno de teste / demo (6):** Janeto Lucas, Rodrigo Pereira, Henrique, Leonardo Fernandes, João Pedro Molter, Pedro Erivelton.
+- **Não criaram NENHUM aluno (5):** William Felipe, Rafael Bucatte, Eduardo (`eduardo.espacoideal`), Jociel Ferreira, Guga Binotto.
+- Os 4 cadastros novos (16–17/06) já chegaram criando o aluno de teste (menos o Guga) — sinal de que o CTA do demo está pegando no onboarding. Gargalo segue em **converter demo → aluno real** (só Rodrigo fez).
+
+#### 3º disparo do lembrete do aluno de teste (campanha `demo-reminder2-jun2026`)
+- Público: os **5 que nunca criaram aluno** (real nem demo) — decisão da usuária via pergunta de targeting. Texto evergreen da `announce-demo` (assunto "Teste o Kinevia com um aluno de demonstração", título "Veja o Kinevia funcionando antes de cadastrar seu primeiro aluno", CTA "Criar meu aluno de teste").
+- **Fadiga de email flagada antes do disparo:** William e Rafael já tinham recebido **3 campanhas de demo cada** (demo-announce, copa-demo, demo-reminder-jun2026) sem reagir. Decisão da usuária: **poupar os dois** e enviar só aos 3 menos saturados.
+- **Enviado a 3/3 `ok`:** eduardo.espacoideal (`780c6fc0…`), jocielf48 (`da398b0f…`), gugabinotto (`7b3f3ff2…`). Guga era o único que nunca tinha recebido nada. Registrado: 3× `sent` em `email_events`, campanha `demo-reminder2-jun2026`.
+- Detalhe: o "nome" do Eduardo no cadastro é o próprio email → saudação caiu no fallback "Olá, Personal" (guarda do `firstName()`).
+- ⚠️ **`ANNOUNCE_TOKEN` rotacionado de novo** (valor anterior não-recuperável). Sempre redefinir o secret antes de reusar a função.
+
+#### Infra/ambiente
+- **O MCP do Supabase passou a autenticar neste ambiente** (antes dava `Unrecognized client_id`). Snapshot e verificação do `email_events` foram feitos via `execute_sql` do MCP direto, sem precisar da função security definer + anon key. Disparo do email seguiu pelo CLI (`supabase.exe secrets set` + invoke REST) porque não há tool MCP para setar secret/invocar função.
 
 ### Sessão 33 — Snapshot de cadastros + 2º disparo do lembrete "aluno de teste"
 
