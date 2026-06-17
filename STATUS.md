@@ -27,6 +27,14 @@ Objetivo: recontar cadastros (excl. `tatidpl`, Marcos, João Victor), ver quem a
 #### Infra/ambiente
 - **O MCP do Supabase passou a autenticar neste ambiente** (antes dava `Unrecognized client_id`). Snapshot e verificação do `email_events` foram feitos via `execute_sql` do MCP direto, sem precisar da função security definer + anon key. Disparo do email seguiu pelo CLI (`supabase.exe secrets set` + invoke REST) porque não há tool MCP para setar secret/invocar função.
 
+#### Reformulação da `/trial/stats` (gráfico de cadastros + ativação por tipo de aluno)
+- **Gráfico de cadastros desde 10/06**: novo combo chart SVG hand-rolled em `TrialStatsPage.tsx` (componente `SignupsChart`) — barras = cadastros por dia, linha dourada = total acumulado, com rótulos em cada ponto. Quadro no topo (abaixo dos KPIs) com o número grande de "cadastros no total".
+- **RPC `signups_daily(p_since date)`** (migration `20260617000001_signups_daily.sql`): cadastros por dia em fuso `America/Sao_Paulo`, dias vazios preenchidos com `generate_series`, security definer, só agregados (granted a anon). **Exclui SEMPRE 3 UUIDs hardcoded** — Tatiana `6bff0f76…`, Marcos `72ab42b4…`, João Victor `861b14c0…`. Baseline real antes de 10/06 = 0, então o acumulado da janela é o total real (sequência: 0,4,4,5,8,9,12).
+- ⚠️ **`João Pedro Molter` (`joaomolter`) NÃO é o João Victor** — fica DENTRO das métricas. Só os 3 UUIDs acima são excluídos.
+- **Cards de ativação por tipo de aluno** abaixo do gráfico, via **RPC `signups_activation(p_since date)`** (migration `20260617000002_signups_activation.sql`, mesmo padrão agregado/security definer/exclusão dos 3): Ativaram aluno real, Ativaram aluno de teste (demo), Ativaram algum aluno, Sem nenhum aluno. Snapshot 17/06: **2 real / 6 demo / 7 qualquer / 5 nenhum** (de 12). 2+6 ≠ 7 porque o Rodrigo tem real E demo.
+- **Card "Campanha de email — Aluno de teste" removido** da página (estado `campaign` + fetch `campaign_funnel` retirados). A RPC `campaign_funnel`/tabela `email_events` continuam no banco, só saíram da UI.
+- 2 commits em `master` (`0241ced` gráfico + remoção do card; `bb8af69` cards de ativação). Migrations aplicadas via MCP `apply_migration`; `tsc --noEmit` limpo, build de produção ok.
+
 ### Sessão 33 — Snapshot de cadastros + 2º disparo do lembrete "aluno de teste"
 
 Objetivo: contar cadastros (excl. `tatidpl`, Marcos, João Victor), ver quem tem alunos e quem usa o aluno de teste; depois re-engajar os não-ativados.
