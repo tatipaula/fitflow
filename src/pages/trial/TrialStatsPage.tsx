@@ -3,6 +3,9 @@ import { supabase } from '@/lib/supabase'
 
 const STATS_PW = import.meta.env.VITE_STATS_PW as string
 
+// Início da validação — cadastros são contados a partir deste dia.
+const SIGNUPS_SINCE = '2026-06-10'
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface PageEvent {
   id: string
@@ -117,6 +120,87 @@ function Bar({ value, max, label, count }: { value: number; max: number; label: 
   )
 }
 
+// ── Gráfico de cadastros (barras = dia · linha = total acumulado) ──────────────
+function SignupsChart({ data }: { data: { dia: string; cadastros: number }[] }) {
+  if (data.length === 0) {
+    return <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: T.stone }}>Sem cadastros ainda.</div>
+  }
+
+  // acumulado dia a dia
+  let running = 0
+  const pts = data.map(d => {
+    running += d.cadastros
+    return { dia: d.dia, cadastros: d.cadastros, total: running }
+  })
+
+  const dailyMax = Math.max(...pts.map(p => p.cadastros), 1)
+  const cumMax   = Math.max(...pts.map(p => p.total), 1)
+
+  // geometria (coordenadas em viewBox; SVG escala para a largura do container)
+  const step   = 56
+  const padL   = 16
+  const padR   = 16
+  const padT   = 24
+  const padB   = 30
+  const plotH  = 180
+  const W      = padL + padR + step * pts.length
+  const H      = padT + plotH + padB
+
+  const xAt   = (i: number) => padL + step * i + step / 2
+  const yBar  = (v: number) => padT + plotH - (v / dailyMax) * plotH
+  const yLine = (v: number) => padT + plotH - (v / cumMax) * plotH
+
+  const barW = 22
+  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i)} ${yLine(p.total)}`).join(' ')
+
+  const fmtDay = (iso: string) => { const [, m, d] = iso.split('-'); return `${d}/${m}` }
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }} preserveAspectRatio="xMidYMid meet">
+      {/* linha de base */}
+      <line x1={padL} y1={padT + plotH} x2={W - padR} y2={padT + plotH} stroke="rgba(28,26,23,0.12)" strokeWidth={1} />
+
+      {/* barras = cadastros do dia */}
+      {pts.map((p, i) => p.cadastros > 0 && (
+        <g key={`bar-${p.dia}`}>
+          <rect
+            x={xAt(i) - barW / 2}
+            y={yBar(p.cadastros)}
+            width={barW}
+            height={padT + plotH - yBar(p.cadastros)}
+            rx={3}
+            fill="rgba(28,26,23,0.16)"
+          />
+          <text x={xAt(i)} y={yBar(p.cadastros) - 6} textAnchor="middle"
+            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fill: 'var(--fg-3)' }}>
+            {p.cadastros}
+          </text>
+        </g>
+      ))}
+
+      {/* linha = total acumulado */}
+      <path d={linePath} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      {pts.map((p, i) => (
+        <g key={`dot-${p.dia}`}>
+          <circle cx={xAt(i)} cy={yLine(p.total)} r={3.5} fill="var(--accent)" />
+          <text x={xAt(i)} y={yLine(p.total) - 9} textAnchor="middle"
+            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 500, fill: 'var(--ink-2)' }}>
+            {p.total}
+          </text>
+        </g>
+      ))}
+
+      {/* eixo x = dias */}
+      {pts.map((p, i) => (
+        <text key={`x-${p.dia}`} x={xAt(i)} y={H - 10} textAnchor="middle"
+          style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fill: 'var(--fg-3)' }}>
+          {fmtDay(p.dia)}
+        </text>
+      ))}
+    </svg>
+  )
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 // ── Password gate ─────────────────────────────────────────────────────────────
 function PasswordGate({ onAuth }: { onAuth: () => void }) {
@@ -184,7 +268,7 @@ export default function TrialStatsPage() {
   // Investimento em anúncios (entrada manual)
   const [spend, setSpend]             = useState<{ spend_date: string; amount_brl: number }[]>([])
   const [activation, setActivation]   = useState<{ new_trainers: number; activated_trainers: number; athletes_total: number } | null>(null)
-  const [campaign, setCampaign]       = useState<{ sent: number; opened: number; clicked: number; created_demo: number } | null>(null)
+  const [signups, setSignups]         = useState<{ dia: string; cadastros: number }[]>([])
   const [reloadKey, setReloadKey]     = useState(0)
   const [formDate, setFormDate]       = useState(() => new Date().toISOString().slice(0, 10))
   const [formAmount, setFormAmount]   = useState('')
@@ -214,13 +298,13 @@ export default function TrialStatsPage() {
         .gte('spend_date', sinceDay)
         .order('spend_date', { ascending: false }),
       supabase.rpc('validation_activation', { p_days: days }),
-      supabase.rpc('campaign_funnel', { p_campaign: 'demo-announce' }),
-    ]).then(([ev, sp, act, camp]) => {
+      supabase.rpc('signups_daily', { p_since: SIGNUPS_SINCE }),
+    ]).then(([ev, sp, act, su]) => {
       if (ev.error) { setError(ev.error.message); setLoading(false); return }
       setEvents((ev.data as PageEvent[]) ?? [])
       setSpend((sp.data as { spend_date: string; amount_brl: number }[]) ?? [])
       setActivation((Array.isArray(act.data) ? act.data[0] : act.data) ?? null)
-      setCampaign((Array.isArray(camp.data) ? camp.data[0] : camp.data) ?? null)
+      setSignups((su.data as { dia: string; cadastros: number }[]) ?? [])
       setLoading(false)
     })
   }, [days, authed, reloadKey])
@@ -243,6 +327,7 @@ export default function TrialStatsPage() {
 
   // ── Aggregations ────────────────────────────────────────────────────────────
   const total = uniqueSessions(events)
+  const totalSignups = signups.reduce((s, d) => s + d.cadastros, 0)
 
   const ctaSessionCount = uniqueSessions(events, e => e.event === 'cta_click')
   const ctaClickCount   = events.filter(e => e.event === 'cta_click').length
@@ -364,6 +449,35 @@ export default function TrialStatsPage() {
             )}
           </div>
 
+          {/* ── Cadastros por dia (barras) + total acumulado (linha) ── */}
+          <div style={{ background: T.paper, borderRadius: 12, padding: '28px', border: '1px solid rgba(28,26,23,0.1)', marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.stone }}>
+                Cadastros por dia · total acumulado
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: T.stone, fontWeight: 300 }}>
+                  Desde 10/06 · exclui contas de teste (Marcos, Tatiana, João Victor)
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: T.stone }}>
+                  <span style={{ width: 12, height: 8, background: 'rgba(28,26,23,0.16)', borderRadius: 2, display: 'inline-block' }} /> dia
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: T.stone }}>
+                  <span style={{ width: 12, height: 2, background: 'var(--accent)', display: 'inline-block' }} /> acumulado
+                </span>
+              </div>
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <span style={{ fontFamily: "'Cormorant', serif", fontWeight: 300, fontSize: 44, color: T.ink, lineHeight: 1 }}>
+                {totalSignups}
+              </span>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: T.stone, fontWeight: 300, marginLeft: 10 }}>
+                cadastros no total
+              </span>
+            </div>
+            <SignupsChart data={signups} />
+          </div>
+
           {/* ── Investimento em anúncios ── */}
           <div style={{ background: T.paper, borderRadius: 12, padding: '28px', border: '1px solid rgba(28,26,23,0.1)', marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
@@ -412,24 +526,6 @@ export default function TrialStatsPage() {
                 </tbody>
               </table>
             )}
-          </div>
-
-          {/* ── Campanha de email — Aluno de teste ── */}
-          <div style={{ background: T.paper, borderRadius: 12, padding: '28px', border: '1px solid rgba(28,26,23,0.1)', marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.stone }}>
-                Campanha de email — Aluno de teste
-              </div>
-              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: T.stone, fontWeight: 300 }}>
-                Enviada em 12/06 aos treinadores sem alunos
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
-              <MiniStat label="Enviados"               value={String(campaign?.sent ?? 0)} />
-              <MiniStat label="Abriram"                value={String(campaign?.opened ?? 0)} sub={`${pct(campaign?.opened ?? 0, campaign?.sent ?? 0)} dos enviados`} />
-              <MiniStat label="Clicaram no CTA"        value={String(campaign?.clicked ?? 0)} sub={`${pct(campaign?.clicked ?? 0, campaign?.sent ?? 0)} dos enviados`} />
-              <MiniStat label="Criaram aluno de teste" value={String(campaign?.created_demo ?? 0)} sub={`${pct(campaign?.created_demo ?? 0, campaign?.sent ?? 0)} de conversão`} />
-            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 24, marginBottom: 24 }}>
