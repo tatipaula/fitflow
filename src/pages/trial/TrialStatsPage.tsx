@@ -269,6 +269,7 @@ export default function TrialStatsPage() {
   const [spend, setSpend]             = useState<{ spend_date: string; amount_brl: number }[]>([])
   const [activation, setActivation]   = useState<{ new_trainers: number; activated_trainers: number; athletes_total: number } | null>(null)
   const [signups, setSignups]         = useState<{ dia: string; cadastros: number }[]>([])
+  const [activationKind, setActivationKind] = useState<{ total_cadastros: number; ativaram_aluno_real: number; ativaram_aluno_teste: number; ativaram_qualquer: number } | null>(null)
   const [reloadKey, setReloadKey]     = useState(0)
   const [formDate, setFormDate]       = useState(() => new Date().toISOString().slice(0, 10))
   const [formAmount, setFormAmount]   = useState('')
@@ -299,12 +300,14 @@ export default function TrialStatsPage() {
         .order('spend_date', { ascending: false }),
       supabase.rpc('validation_activation', { p_days: days }),
       supabase.rpc('signups_daily', { p_since: SIGNUPS_SINCE }),
-    ]).then(([ev, sp, act, su]) => {
+      supabase.rpc('signups_activation', { p_since: SIGNUPS_SINCE }),
+    ]).then(([ev, sp, act, su, ak]) => {
       if (ev.error) { setError(ev.error.message); setLoading(false); return }
       setEvents((ev.data as PageEvent[]) ?? [])
       setSpend((sp.data as { spend_date: string; amount_brl: number }[]) ?? [])
       setActivation((Array.isArray(act.data) ? act.data[0] : act.data) ?? null)
       setSignups((su.data as { dia: string; cadastros: number }[]) ?? [])
+      setActivationKind((Array.isArray(ak.data) ? ak.data[0] : ak.data) ?? null)
       setLoading(false)
     })
   }, [days, authed, reloadKey])
@@ -476,6 +479,29 @@ export default function TrialStatsPage() {
               </span>
             </div>
             <SignupsChart data={signups} />
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginTop: 24, borderTop: '1px solid rgba(28,26,23,0.08)', paddingTop: 24 }}>
+              <MiniStat
+                label="Ativaram aluno real"
+                value={String(activationKind?.ativaram_aluno_real ?? 0)}
+                sub={`${pct(activationKind?.ativaram_aluno_real ?? 0, activationKind?.total_cadastros ?? 0)} dos cadastros`}
+              />
+              <MiniStat
+                label="Ativaram aluno de teste"
+                value={String(activationKind?.ativaram_aluno_teste ?? 0)}
+                sub={`${pct(activationKind?.ativaram_aluno_teste ?? 0, activationKind?.total_cadastros ?? 0)} dos cadastros`}
+              />
+              <MiniStat
+                label="Ativaram algum aluno"
+                value={String(activationKind?.ativaram_qualquer ?? 0)}
+                sub={`${pct(activationKind?.ativaram_qualquer ?? 0, activationKind?.total_cadastros ?? 0)} dos cadastros`}
+              />
+              <MiniStat
+                label="Sem nenhum aluno"
+                value={String((activationKind?.total_cadastros ?? 0) - (activationKind?.ativaram_qualquer ?? 0))}
+                sub={`${pct((activationKind?.total_cadastros ?? 0) - (activationKind?.ativaram_qualquer ?? 0), activationKind?.total_cadastros ?? 0)} dos cadastros`}
+              />
+            </div>
           </div>
 
           {/* ── Investimento em anúncios ── */}
