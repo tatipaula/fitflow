@@ -1,10 +1,45 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-17 (sessão 34)
+## Última atualização: 2026-06-23 (sessão 35)
+
+---
+
+## ⏭️ Decisão para a próxima sessão
+
+**Tier 2 — e-mail "humano" (founder-led onboarding).** Agora que a caixa `suporte@kinevia.com.br` recebe (ver sessão 35), o próximo passo de maior alavancagem é trocar o remetente `from` de `no-reply@kinevia.com.br` por um **endereço humano** (ex.: `tati@kinevia.com.br`) nos e-mails de **welcome** (`welcome-trainer`) e **trial** (`offer-plans`). Objetivo: lead responde o e-mail e a Tatiana fala com quem travou na ativação. **Pendente 2 decisões da usuária antes de implementar:** (1) qual endereço usar; (2) se quer reescrever o texto com voz de fundadora (1ª pessoa) ou manter o copy atual só trocando o remetente. O `tati@` já cai no Gmail via catch-all `*@kinevia.com.br` do ImprovMX, então não precisa de config nova de DNS — só editar as edge functions.
 
 ---
 
 ## Concluído
+
+### Sessão 35 — Caixa de e-mail inbound (suporte@) + checklist de ativação + fix de entregabilidade
+
+Objetivo: atacar o gargalo de ativação (lead cadastra mas não cria aluno real / não vira cliente) e avaliar a necessidade de uma caixa que **recebe** e-mails do Kinevia. Plano em tiers; executado o Tier 1 completo.
+
+#### Diagnóstico (exploração do funil + infra de e-mail)
+- **Sistema era 100% outbound, sem caixa que recebe.** Porém vários e-mails (`recovery`, `purchase-confirmed`, `announce-demo`, `check-billing`) usam `reply_to: suporte@kinevia.com.br` e têm CTA "Fale com a gente" → respostas de leads caíam em **buraco negro**. Decisão: não construir inbound no app; configurar caixa real monitorada com forward pro Gmail.
+- Gargalo confirmado: trainer vê o aluno de demonstração (`is_demo`) como destino final e nunca cria aluno real (trava em `onboarding`, não chega em `athlete_created`).
+
+#### Caixa de e-mail inbound — `suporte@kinevia.com.br` (ImprovMX → Gmail)
+- **Zoho descartado** (removeram o "Forever Free" na maioria das regiões). Escolhido **ImprovMX** (encaminhamento grátis, DNS-agnóstico).
+- DNS no **Registro.br**: 2 MX (`mx1`/`mx2.improvmx.com`, prio 10/20) + TXT SPF `v=spf1 include:spf.improvmx.com ~all`. Verificado via `Resolve-DnsName`: propagado, **sem conflito de SPF com o Resend** (raiz tinha só 1 registro spf).
+- Aliases criados: **`suporte@`** e catch-all **`*@`** → `tatidpl@gmail.com`.
+- **Armadilha resolvida:** os 2 primeiros testes bounçaram. (1) "Address not found" = alias ainda não existia; (2) "550 5.2.1 account disabled" = a **conta do ImprovMX precisava ser validada** (link no e-mail "Important: Validate your account"). Após validar, o forward funcionou — teste confirmado chegando no Gmail.
+
+#### Fix de entregabilidade — `check-billing`
+- A função de cobrança enviava de **`onboarding@resend.dev`** (sandbox do Resend, domínio compartilhado → alto risco de spam/bloqueio no e-mail que o personal mais precisa ver). Era a **única das 8 functions fora do padrão**.
+- Corrigido para `from: 'Kinevia <no-reply@kinevia.com.br>'` + `reply_to: 'suporte@kinevia.com.br'`.
+- **Deployado via MCP Supabase (v24 → v25)**, `verify_jwt: true` preservado (cron diário não quebra). Conteúdo no ar verificado.
+
+#### Checklist de ativação — `DashboardPage.tsx` (homeView)
+- Card **"Ative sua conta"** no topo da home, com 3 passos derivados de dados já em memória (sem fetch/migration novos): aluno real (`!is_demo`), primeiro treino p/ aluno real, aluno entrou no app (`auth_user_id`). Só o passo atual recebe a ação primária (accent); demais discretos. Some quando os 3 estão completos.
+- **Reposiciona o aluno demo como exploração, não meta.** Consts derivadas + JSX declarados antes das views (zona segura de TDZ — mesma armadilha que derrubou produção na sessão 30).
+- Novo evento **`activation_checklist_click`** (`{ step }`) em `analytics.ts` / `page_events` para medir impacto no `/trial/stats` nos próximos dias.
+
+#### Git / Deploy
+- 1 commit em `master` (`eebe791`) com os 3 arquivos (analytics, DashboardPage, check-billing), pushado pra `origin/master` (`fitflow`).
+- Deploy de produção via **Vercel CLI** (`vercel --prod`): `dpl_AvKDgbamq7bghQcpBCqC3SMURUBV`, READY, aliasado em **kinevia.com.br**. `tsc --noEmit` limpo antes de subir.
+- Os `.zip`/`_sales_page_tmp/` na raiz ficaram fora do commit de propósito (material à parte).
 
 ### Sessão 34 — Snapshot de cadastros + 3º disparo do lembrete "aluno de teste"
 
