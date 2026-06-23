@@ -4,9 +4,19 @@
 
 ---
 
-## ⏭️ Decisão para a próxima sessão
+## ⏭️ Plano de ativação dos leads — pendências e decisões
 
-**Tier 2 — e-mail "humano" (founder-led onboarding).** Agora que a caixa `suporte@kinevia.com.br` recebe (ver sessão 35), o próximo passo de maior alavancagem é trocar o remetente `from` de `no-reply@kinevia.com.br` por um **endereço humano** (ex.: `tati@kinevia.com.br`) nos e-mails de **welcome** (`welcome-trainer`) e **trial** (`offer-plans`). Objetivo: lead responde o e-mail e a Tatiana fala com quem travou na ativação. **Pendente 2 decisões da usuária antes de implementar:** (1) qual endereço usar; (2) se quer reescrever o texto com voz de fundadora (1ª pessoa) ou manter o copy atual só trocando o remetente. O `tati@` já cai no Gmail via catch-all `*@kinevia.com.br` do ImprovMX, então não precisa de config nova de DNS — só editar as edge functions.
+Plano de 4 tiers traçado na sessão 35 para fazer o lead **ativar o aluno real e virar cliente**. O **Tier 1 foi executado** (caixa inbound + checklist + fix de entregabilidade). Falta o que segue, em ordem de prioridade recomendada:
+
+**1. Reduzir fricção do convite do aluno (Tier 2).** Hoje o `ConvitePage` tem 3 passos (senha → PAR-Q → dados físicos) e o aluno desiste no meio. O aluno precisa entrar rápido pro app "ganhar vida" (é o passo 3 do checklist lançado na sessão 35). **Ação:** tornar **PAR-Q e dados físicos opcionais/adiáveis** — entrar com só a senha, completar o resto depois. Prioridade 1 por sinergia direta com o checklist.
+
+**2. Drip comportamental no trial, segmentado por ativação (Tier 3).** Hoje `offer-plans` (D-3) e `recovery` tratam todos igual. Falta nudge pra quem **não ativou**: D+1 sem aluno real → "cadastre seu primeiro aluno"; aluno criado sem treino → "monte o primeiro treino"; **só empurrar venda/paywall pra quem já ativou**. **Ação:** cron + edge function que segmenta trainers por estado (dados já existem: `signups_activation`, eventos do funil). A caixa de e-mail já está pronta.
+
+**3. `from` humano nos e-mails de welcome + trial (sobra do Tier 1).** Trocar `no-reply@kinevia.com.br` por endereço humano (ex.: `tati@kinevia.com.br`) em `welcome-trainer` e `offer-plans` → founder-led onboarding (lead responde, Tatiana fala com quem travou). O `tati@` já cai no Gmail via catch-all do ImprovMX — sem DNS novo, só editar as edge functions. **Pendente 2 decisões da usuária:** (a) qual endereço; (b) manter o copy atual só trocando o remetente, ou reescrever com voz de fundadora (1ª pessoa).
+
+**4. Conversão para pago por estado de ativação no `/trial/stats` (Tier 4).** Métrica que valida a tese inteira: "trainer que ativa aluno real converte mais que quem não ativa?". **Deixado por último de propósito** — é leitura e ganha confiabilidade com mais dias de dados do checklist rodando.
+
+**Parcial / já encaminhado:** o reposicionamento do aluno demo como "máximo local" foi parcialmente atacado pelo checklist (sessão 35); falta a parte mais forte — deixar o demo levemente **read-only** pra não virar substituto do trabalho real.
 
 ---
 
