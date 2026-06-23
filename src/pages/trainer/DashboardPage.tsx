@@ -835,6 +835,80 @@ export default function DashboardPage() {
 
   const showDemoCta = athletes.length === 0
 
+  // ── Funil de ativação: checklist guiado ───────────────────────────────────
+  // Deriva o estado de cada passo dos dados já em memória (sem fetch novo).
+  // O aluno de demonstração (is_demo) NÃO conta — a meta é o aluno real.
+  const realAthletes = athletes.filter((a) => !a.is_demo)
+  const realAthleteIds = new Set(realAthletes.map((a) => a.id))
+  const stepRealAthlete = realAthletes.length > 0
+  const stepRealWorkout = workouts.some((w) => realAthleteIds.has(w.athlete_id))
+  const stepAthleteJoined = realAthletes.some((a) => a.auth_user_id)
+  const activationCount = [stepRealAthlete, stepRealWorkout, stepAthleteJoined].filter(Boolean).length
+  const activationDone = activationCount === 3
+
+  const activationSteps: { done: boolean; title: string; desc: string; cta: string; onClick: () => void }[] = [
+    {
+      done: stepRealAthlete,
+      title: 'Cadastre seu primeiro aluno',
+      desc: 'Um aluno de verdade — leva menos de um minuto.',
+      cta: 'Cadastrar aluno',
+      onClick: () => { track('activation_checklist_click', { step: 'real_athlete' }, trainer?.id); setView('athletes'); setShowAddAthlete(true) },
+    },
+    {
+      done: stepRealWorkout,
+      title: 'Monte o primeiro treino',
+      desc: 'Fale o treino e a IA monta a ficha em segundos.',
+      cta: 'Criar treino',
+      onClick: () => { track('activation_checklist_click', { step: 'real_workout' }, trainer?.id); setInputMode('audio'); setView('recording') },
+    },
+    {
+      done: stepAthleteJoined,
+      title: 'Leve seu aluno para dentro do app',
+      desc: 'Envie o acesso por WhatsApp ou e-mail — quando ele entra, o Kinevia ganha vida.',
+      cta: 'Enviar acesso',
+      onClick: () => { track('activation_checklist_click', { step: 'invite' }, trainer?.id); setView('athletes') },
+    },
+  ]
+  // Primeiro passo incompleto: só ele recebe destaque/ação primária por vez.
+  const activationCurrent = activationSteps.findIndex((s) => !s.done)
+
+  const activationChecklist = !activationDone && (
+    <Card style={{ padding: isMobile ? 18 : 22, marginBottom: 28, border: '1px solid var(--accent)', background: 'var(--accent-soft)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: isMobile ? 16 : 18, fontWeight: 700, color: 'var(--fg-1)' }}>Ative sua conta</div>
+          <div style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 2 }}>3 passos para tirar valor real do Kinevia</div>
+        </div>
+        <div style={{ flexShrink: 0, textAlign: 'right' }}>
+          <div className="num" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, marginBottom: 6 }}>{activationCount}/3</div>
+          <div style={{ width: 64 }}><KVMeter value={activationCount / 3}/></div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {activationSteps.map((s, i) => {
+          const isCurrent = i === activationCurrent
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--r-md)', background: isCurrent ? 'var(--ink-2)' : 'transparent', border: `1px solid ${isCurrent ? 'var(--accent)' : 'transparent'}`, opacity: s.done ? 0.55 : 1 }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: s.done ? 'var(--accent)' : 'transparent', border: `1.5px solid ${s.done ? 'var(--accent)' : 'var(--ink-4)'}` }}>
+                {s.done ? KVIcon.check(13, 'var(--accent-ink)') : <span className="num" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{i + 1}</span>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--fg-1)', textDecoration: s.done ? 'line-through' : 'none' }}>{s.title}</div>
+                {!s.done && isCurrent && <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{s.desc}</div>}
+              </div>
+              {!s.done && (
+                <button onClick={s.onClick}
+                  style={{ flexShrink: 0, height: 36, padding: isMobile ? '0 12px' : '0 16px', borderRadius: 999, border: isCurrent ? 'none' : '1px solid var(--ink-4)', background: isCurrent ? 'var(--accent)' : 'transparent', color: isCurrent ? 'var(--accent-ink)' : 'var(--fg-2)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                  {s.cta}{isCurrent && KVIcon.chevR(12, 'var(--accent-ink)')}
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </Card>
+  )
+
   // Sugestões de autocomplete para edição de exercício — declaradas aqui (antes
   // das views) para não cair em TDZ quando o form de edição é renderizado.
   const allLibraryNames = EXERCISE_LIBRARY.flatMap((g) => g.exercises.map((e) => e.name))
@@ -910,6 +984,8 @@ export default function DashboardPage() {
         <div className="display" style={{ fontSize: isMobile ? 32 : 40 }}>Dashboard</div>
         <div style={{ fontSize: 14, color: 'var(--fg-3)', marginTop: 4 }}>Bem-vindo de volta, {trainer?.name?.split(' ')[0] ?? 'Coach'}</div>
       </div>
+
+      {activationChecklist}
 
       {showDemoCta && (
         <Card style={{ padding: isMobile ? 20 : 24, marginBottom: 28, border: '1px solid var(--accent)', background: 'var(--accent-soft)', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: 16 }}>

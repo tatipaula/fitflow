@@ -15,6 +15,7 @@ export type PageEventName =
   | 'invite_copied'
   | 'workout_started'
   | 'workout_created'
+  | 'activation_checklist_click'
 
 function getSessionId(): string {
   const key = 'kv_trial_sid'
