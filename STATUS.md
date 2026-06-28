@@ -1,6 +1,6 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-23 (sessão 35)
+## Última atualização: 2026-06-28 (sessão 37)
 
 ---
 
@@ -21,6 +21,60 @@ Plano de 4 tiers traçado na sessão 35 para fazer o lead **ativar o aluno real 
 ---
 
 ## Concluído
+
+### Sessão 37 — Verificação de ativação + reativação dos trials que vencem hoje/amanhã
+
+Objetivo: medir o nível de ativação dos trials e não perder os leads cuja janela vence agora.
+
+#### Diagnóstico de ativação (snapshot 28/06 — 37 trials em `plan='free'`)
+- **Sessão de treino executada pelo aluno = 0 em TODOS os 37.** Ninguém fechou o loop completo (aluno real → treino → aluno executa). É o gargalo de fundo.
+- **Aluno real cadastrado: só 8 de 37** — Rodrigo Pereira, Luis Felipe, Jose Gustavo, Gustavo Fernandes, Glandeon, Edvaldo, Marco Túlio, Valdesandro. O resto vive no aluno demo ou em nada.
+- Query de ativação por trainer: real/demo athletes + treinos + sessões + convites (LEFT JOINs em athletes/workouts/sessions/invites). Útil reusar.
+
+#### Os 4 urgentes (venceu ontem / hoje / amanhã) — estados opostos
+- **Janeto Lucas** (venceu 27/06): 1 demo, 2 treinos no demo, **0 aluno real** → explorou e travou no demo.
+- **Eduardo** (`eduardo.espacoideal`, vencia 28/06): 0 de tudo — tire-kicker.
+- **Jociel Ferreira** (vencia 29/06): 0 de tudo — tire-kicker.
+- **Rodrigo Pereira** (vencia 29/06): **ATIVADO** — 1 aluno real + 1 treino + 5 convites; só falta o aluno entrar/treinar. **Caso mais quente da base** (follow-up de maior ROI = reenviar convite).
+
+#### Ações executadas
+- **Trial dos 4 estendido para 05/07** (`trial_ends_at = '2026-07-05 23:59:59-03'`) — folga antes do paywall, mesmo padrão da sessão 36. **Decisões da usuária:** incluir Janeto (já vencido) e estender antes de enviar.
+- **E-mail de ativação 1:1 segmentado por estágio** (3 variantes), regras de copy fixas (self-service, sem persona de fundadora, sem call, assinado "Equipe Kinevia", CTA → login):
+  - **Variante A** (frio, 0 alunos): Eduardo, Jociel — "cadastre seu primeiro aluno (ou aluno de teste)".
+  - **Variante B** (explorou demo, sem aluno real): Janeto — "cadastre seu primeiro aluno real".
+  - **Variante C** (ativado, aluno não entrou): Rodrigo — "reenvie o convite, falta o aluno entrar".
+- **4/4 `sent`** via Resend `no-reply@kinevia.com.br` (reply_to `suporte@`), edge function descartável **`activation-blast`** (recipients/variantes hardcoded, guarda por token `kv-activation-2026-07-01`, `--no-verify-jwt`). Eventos gravados em `email_events`, campanha **`activation-2026-06`**. Eduardo sem nome no cadastro → saudação caiu no fallback "Personal".
+- **Função neutralizada após o disparo** (re-deploy v2 inerte que responde 410; não há tool MCP de delete — apagar de vez pelo painel/CLI quando quiser).
+- CSV de contatos atualizado na raiz (`trials_2026-06-28.csv`) com os novos vencimentos dos 4.
+
+#### Follow-up agendado
+- Lembrete para **01/07** (3 dias): conferir quais dos 4 reagiram (criaram aluno / executaram treino) antes do novo vencimento (05/07) — Rodrigo é prioridade (reenvio de convite).
+
+### Sessão 36 — Verificação de pagantes + reativação dos trials vencidos
+
+Objetivo: saber se há algum pagante e reativar quem estava vencendo.
+
+#### Pagantes — diagnóstico
+- **Zero pagantes confirmados.** `payment_logs` vazia e **nenhum trainer com `stripe_subscription_id`**.
+- 2 contas `plan='pro'`: **Tatiana** (conta dona/teste) e **Marcos Matias Xavier** (`pro` **sem** Stripe nem `payment_logs` — **cortesia intencional**, confirmado).
+- 4 trainers chegaram ao checkout (`stripe_customer_id`) mas **nenhum concluiu**: Robson Madeira, Glandeon Junior, Éder kan, Edvaldo Dias.
+
+#### Reativação de trials vencidos / vencendo hoje
+- Estendido `trial_ends_at` **+7 dias (→ 2026-07-03)** para os 4: **João Victor** (`jv.cavalcanti07`, venceu 24/06), **William Felipe**, **Rafael Bucatte**, **Luis Felipe** (`luisfelipedesaconsultoria`).
+- Disparado e-mail de reativação 1:1 segmentado por ativação:
+  - **Variante A** (criou conta, 0 alunos): João Victor, William, Rafael.
+  - **Variante B** (já ativou — 1 aluno + 1 treino): Luis Felipe.
+- **Decisões de copy (usuária):** sem persona de fundadora, sem "eu monto com você", sem call — é app self-service, assinado "Equipe Kinevia". CTA aponta pro **login** (`https://kinevia.com.br/login`).
+- Envio via Resend `no-reply@kinevia.com.br` numa edge function **descartável** `reactivate-trial` (recipients/variantes hardcoded, guarda por token embutido, `--no-verify-jwt`), **deletada após o disparo**. 4/4 `sent`, eventos gravados em `email_events` campanha `reactivate-trial-2026-06`.
+- **Nota:** João Victor é **conta de teste** (confirmado) — é um dos 3 UUIDs hardcoded como "sempre desconsiderar" nas métricas; entrou na leva por conveniência do disparo, mas nunca conta como conversão real.
+
+#### Auditoria do Stripe — por que os 4 checkouts não converteram (INSIGHT)
+Verificado direto na API do Stripe (modo **LIVE**) para os 4 customers: cada um tem **1 checkout session `expired`/`unpaid`** e **zero `payment_intents`, zero `charges`, zero `subscriptions`**. Conclusão técnica: **abandono puro antes de digitar o cartão** — não houve recusa de cartão, não houve falha de webhook, e **nada vazou** (ninguém foi cobrado sem registro; o `STRIPE_WEBHOOK_SECRET` nem foi exercitado).
+- **Diagnóstico de produto (o que importa):** cruzando com ativação, **todos clicaram em "assinar" antes do "aha"**. Sessões de treino executadas = **0 em todos**; treinos montados = **0 em 3 de 4**. Caso a caso: **Éder** clicou sem cadastrar nada (tire-kicker); **Robson** só explorou o aluno demo; **Edvaldo** clicou em pagar *antes* de criar o aluno; **Glandeon** é o mais engajado (2 alunos reais + 5 convites) mas **nunca montou um treino**.
+- **Tese:** o problema não é cartão nem preço — é **sequência**. O CTA de pagamento aparece cedo demais, antes do trainer montar+enviar o 1º treino e ver o aluno treinando. Reforça o **Tier 3** (drip segmentado: só empurrar venda pra quem já ativou) e sugere **esconder/segurar o CTA de assinar enquanto não houver 1º treino enviado**, trocando por "complete seu primeiro treino".
+- **Ação:** email 1:1 de ativação enviado ao **Glandeon** (único genuinamente engajado que tentou pagar) — foco em "falta montar o primeiro treino", tom self-service, CTA → login. Campanha `nudge-workout-2026-06` (1/1 `sent`, registrado em `email_events`). Mesma mecânica da função descartável (deletada após o envio).
+
+---
 
 ### Sessão 35 — Caixa de e-mail inbound (suporte@) + checklist de ativação + fix de entregabilidade
 
