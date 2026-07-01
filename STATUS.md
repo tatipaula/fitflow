@@ -1,6 +1,6 @@
 # Kinevia — Status
 
-## Última atualização: 2026-06-28 (sessão 37)
+## Última atualização: 2026-07-01 (sessão 38)
 
 ---
 
@@ -21,6 +21,27 @@ Plano de 4 tiers traçado na sessão 35 para fazer o lead **ativar o aluno real 
 ---
 
 ## Concluído
+
+### Sessão 38 — Acompanhamento (pagantes + uso real) + instrumentação do funil do aluno
+
+Objetivo: checar trials vencidos / pagantes e ver se algum aluno usa de fato; fechar a cegueira de tracking do lado do aluno.
+
+#### Diagnóstico (snapshot 01/07)
+- **Zero pagantes reais.** `payment_logs` vazia, nenhum `stripe_subscription_id`. **Correção importante: o Stripe JÁ está conectado** (checkout web funcionando) — não é mais pendência; o que há é abandono no checkout. Os 2 `plan='pro'` seguem sendo Tatiana (conta dona) e Marcos (cortesia intencional).
+- **Nenhum aluno EXTERNO registrou treino.** Base: 35 athletes → **13 reais** (22 `is_demo`). Só 4 têm login e nenhum treina. Os 2 únicos com sessão eram testes internos (Arnold-seed e "LF teste").
+- **Marquei o seed `Arnold` como `is_demo=true`** (`2b5a33f7-…`, treinador Tatiana) — estava fora do flag e inflando "aluno real" com 68 sessões.
+- **Funil vaza dos DOIS lados, em degraus opostos:** **Luiza Melucci** (treinador Marcos) — treinador montou **3 treinos**, aluna logou e **nunca iniciou** (trava no aluno); **Dias** (treinador Edvaldo) — aluno fez PAR-Q e ficou parado porque **o treinador nunca montou treino** (trava no treinador). Os outros 2 logados (Tatiana de Paula, LF teste) são teste.
+- **Buraco de tracking confirmado:** `page_events` só instrumentava o app do **treinador** (214/3384 eventos com `user_id`, 34 user_ids, todos trainers, 0 alunos). O caso Luiza ("abriu e desistiu antes de iniciar") era invisível.
+
+#### Ação — instrumentação do funil do aluno (commit `b8d7609`, push `master`, deploy auto em produção)
+- Wrapper **`trackAthlete(event, athlete, data)`** em `src/lib/analytics.ts`: usa `athlete.auth_user_id` como `user_id`, injeta `role:'athlete'`+`athlete_id` no payload, **early-return se `is_demo`** (exclui demo na origem).
+- **6 disparos** em `src/pages/athlete/WorkoutPage.tsx`: `athlete_app_opened` (+`ready_count`/`sessions_count`) e `athlete_no_workout` no `load()`; `workout_opened` no `selectWorkout`; `workout_session_started` no `handleStart`; `first_set_logged` (só 1ª série) no `handleLogSet`; `workout_session_completed` no `handleComplete`.
+- Funil destravado: `select count(*) filter (where event=…) from page_events where data->>'role'='athlete'`. Torna mensuráveis os gaps Luiza (`app_opened` sem `session_started`) e Dias (`athlete_no_workout`).
+- `tsc --noEmit` limpo. Deploy saiu **automático pelo push** (integração GitHub↔Vercel) — Ready em produção, `kinevia.com.br` já aponta pro novo build.
+
+#### Pendente / próximo passo
+- **Topo do funil do aluno ainda NÃO instrumentado** (aceitar convite → PAR-Q → 1º login) — vive em `ConvitePage`/`InvitePage`. Instrumentar num 2º passo se quiser fechar o funil inteiro.
+- Os eventos só acumulam com alunos reais abrindo o app pós-deploy → rodar a query do funil daqui a alguns dias.
 
 ### Sessão 37 — Verificação de ativação + reativação dos trials que vencem hoje/amanhã
 
