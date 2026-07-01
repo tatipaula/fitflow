@@ -5,6 +5,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { KVLogo, KVButton, KVTag, KVAvatar, KVIcon } from '@/components/ui'
 import { getAthleteWorkouts, getExercises, startSession, completeSession, logSet, getAthleteSessions, getTrainer, isBillingDue, calcOverdueMonths, confirmPayment, updateAthleteProfile, uploadAthleteAvatar, getBadgesByAthlete, getAthleteRankingPosition, getAthleteByAuthId, getProgramsByAthlete } from '@/lib/api'
 import { getYouTubeEmbedUrl } from '@/lib/youtube'
+import { trackAthlete } from '@/lib/analytics'
 import type { Athlete, AthleteRankingPosition, Badge, Program, Workout, Exercise, SessionWithLogs, Trainer } from '@/types'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
@@ -83,6 +84,8 @@ export default function WorkoutPage() {
         getProgramsByAthlete(freshAthlete.id),
       ])
       setSessions(s)
+      trackAthlete('athlete_app_opened', freshAthlete, { ready_count: ready.length, sessions_count: s.length })
+      if (ready.length === 0) trackAthlete('athlete_no_workout', freshAthlete)
       setAthleteBadges(badges)
       setRankingPosition(rankPos)
       setActiveProgram(programs.find((p) => p.status === 'active') ?? null)
@@ -110,6 +113,7 @@ export default function WorkoutPage() {
 
   async function selectWorkout(w: Workout) {
     setWorkout(w)
+    if (athlete) trackAthlete('workout_opened', athlete, { workout_id: w.id })
     const ex = await getExercises(w.id)
     setExercises(ex)
     const initSets: Record<string, number> = {}
@@ -142,6 +146,7 @@ export default function WorkoutPage() {
     if (!session) { setStartError('Não foi possível iniciar. Tente novamente.'); setStarting(false); return }
     setSessionId(session.id)
     setStarted(true); setStarting(false)
+    trackAthlete('workout_session_started', athlete, { workout_id: workout.id, session_id: session.id })
     if (exercises.length > 0) setExpandedExId(exercises[0].id)
   }
 
@@ -160,6 +165,7 @@ export default function WorkoutPage() {
 
     if (result) {
       const key = `${ex.id}-${setNum}`
+      if (setsDone.size === 0 && athlete) trackAthlete('first_set_logged', athlete, { session_id: sessionId, exercise_id: ex.id })
       setSetsDone((prev) => new Set([...prev, key]))
       const isLastSet = setNum >= ex.sets
 
@@ -214,6 +220,7 @@ export default function WorkoutPage() {
     if (!sessionId) return
     setCompleting(true)
     await completeSession(sessionId)
+    if (athlete) trackAthlete('workout_session_completed', athlete, { session_id: sessionId })
     setCompleted(true); setCompleting(false)
   }
 

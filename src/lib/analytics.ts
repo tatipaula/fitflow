@@ -16,6 +16,13 @@ export type PageEventName =
   | 'workout_started'
   | 'workout_created'
   | 'activation_checklist_click'
+  // funil de ativação in-app (aluno logado)
+  | 'athlete_app_opened'
+  | 'athlete_no_workout'
+  | 'workout_opened'
+  | 'workout_session_started'
+  | 'first_set_logged'
+  | 'workout_session_completed'
 
 function getSessionId(): string {
   const key = 'kv_trial_sid'
@@ -46,4 +53,16 @@ export async function track(
   } catch {
     // tracking nunca pode quebrar a página
   }
+}
+
+// Wrapper para o funil do aluno: usa o auth_user_id como user_id (não colide
+// com trainers.id, então as queries separam por join ou por data.role) e
+// EXCLUI alunos demo na origem — mesma regra dos KPIs de ativação.
+export function trackAthlete(
+  event: PageEventName,
+  athlete: { id: string; auth_user_id?: string | null; is_demo?: boolean | null },
+  data: Record<string, unknown> = {},
+): void {
+  if (athlete.is_demo) return
+  void track(event, { ...data, role: 'athlete', athlete_id: athlete.id }, athlete.auth_user_id ?? null)
 }
